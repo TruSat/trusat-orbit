@@ -21,11 +21,21 @@ import string
 
 from spacetrack import SpaceTrackClient
 
+# These are necessary until Brandon Rhodes approves pull requests
+# https://github.com/brandon-rhodes/python-sgp4/pull/35
 sys.path.insert(1, '/Users/chris/Dropbox/code/preMVP/python-sgp4')
+# https://github.com/skyfielders/python-skyfield/pull/276
 sys.path.insert(2, '/Users/chris/Dropbox/code/preMVP/python-skyfield')
 
 from skyfield.iokit import Loader, download, parse_tle
 from skyfield import sgp4lib
+
+# The following 5 lines are necessary until our modules are public
+import inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+tle_path = os.path.join(parentdir, "sathunt-tle")
+sys.path.insert(1,tle_path) 
 from tle_util import make_tle, append_tle_file
 
 def unit_vector(vector):
