@@ -533,7 +533,7 @@ def read_obs(iod_lines):
   nobs = len(iod_lines) # Number of iod-compliant formatted lines in the input file
 
   ll    = np.zeros((nobs,3))
-  odata = np.zeros((nobs,3))
+  odata = np.zeros((nobs,4))
   rd    = np.zeros((nobs,3))
 
   i = 0
@@ -592,6 +592,7 @@ def read_obs(iod_lines):
     odata[i][0] = t1_jd # julian date
     odata[i][1] = ra # ra radians (observed)
     odata[i][2] = dc # dc radians (observed)
+    odata[i][3] = iod_line.Station # station
 
     (la, lo, hh) = Sites.topos(iod_line.Station)
     observer_location = Topos(latitude_degrees = la, longitude_degrees = lo, elevation_m = hh)
