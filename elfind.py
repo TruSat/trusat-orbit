@@ -40,7 +40,22 @@ iod_path = os.path.join(parentdir, "sathunt-iod")
 sys.path.insert(1,iod_path) 
 import iod
 
-from satid import mag, unit_vector
+# FIXME: Copy of satfit - source from there
+def mag(v):
+    """ Computes the magnitude of a vector ||v|| 
+
+    Renamed from norm(v) in original Scott Campbell code
+    to better correspond to function names in SGP4 code.
+    """
+    mag = np.sqrt(np.dot(v, v))
+    return mag
+
+# FIXME: Copy of satfit - source from there
+def unit_vector(v):
+    """ Returns the unit vector of the vector.  """
+    u = v / mag(v)
+    return u
+
 
 class CosparSite:
 	# Class variable
@@ -357,10 +372,11 @@ def so2rv(od, rd, ll):
 
 def rref(m): # scaled partial pivoting
   """ gaussian elimination """
-  b = []
-  s = []
+  s = np.zeros(5)
+  b = np.zeros(5)
+  
   # calculate scale factors
-  for i in range (0, 5):
+  for i in range(5):
     s[i] = abs(m[i][0])
     for j in range(1, 5):
       if (s[i] < abs(m[i][j])):
@@ -368,7 +384,7 @@ def rref(m): # scaled partial pivoting
   # end for i
 
   # swap rows according to scale
-  for j in range (0, 4):
+  for j in range (4):
     ROW = j
     for i in range (j + 1, 5):
       if (abs(m[ROW][j] / s[ROW]) < abs(m[i][j] / s[i])):
