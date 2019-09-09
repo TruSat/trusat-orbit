@@ -31,11 +31,20 @@ sys.path.insert(2, '/Users/chris/Dropbox/code/MVP/python-skyfield')
 
 # from skyfield.iokit import Loader, download, parse_tle
 # from skyfield import sgp4lib
+
+from sgp4.propagation import sgp4, sgp4init
+
+# try:
+#     from sgp4.cpropagation import sgp4, sgp4init
+# except ImportError as e:
+#     print(e)
+#     from sgp4.propagation import sgp4, sgp4init
 from sgp4.ext import invjday, days2mdhms
 from sgp4.io import twoline2rv
 from sgp4.model import Satellite
-from sgp4.propagation import sgp4init, sgp4
 from sgp4 import earth_gravity
+
+
 
 # The following 5 lines are necessary until our modules are public
 import inspect
@@ -457,8 +466,7 @@ def unit_vector(v):
 
 def delta_t(sat,t):
     tsince = (t - sat.jdsatepoch) * 1440.0 # time since epoch in minutes
-    # whichconst = sat.whichconst
-    (rr, vv) = sgp4(sat,tsince,None) 
+    (rr, vv) = sgp4(sat,tsince,sat.whichconst) 
 
     sat.rr = np.asarray(rr) / sat.radiusearthkm # In Earth radii
     sat.vv = np.asarray(vv) / (sat.radiusearthkm / 60.0)  # In Earth radii / min - seriously!
@@ -721,7 +729,7 @@ def print_el(sat, deg=False, quiet=False):
         xnodeo = degrees(sat.nodeo)
         omegao = degrees(sat.argpo)
         xmo    = degrees(sat.mo)
-        xno    = degrees(sat.no_unkozai) * 1440/360 # revs per day
+        xno    = degrees(sat.no_kozai) * 1440/360 # revs per day
 
     # if name:
     #     line0  = "{:24s}".format(name) 
@@ -820,7 +828,7 @@ def sort(iod_line, odata, ll, rd):
             unsorted = 1 # Set the flag to sort again.
     return [iod_line, odata, ll, rd]
 
-
+# TODO: This function (and those it calls) will benefit the best from accelerating
 def find_rms(satx, rd, ll, odata): ## WORKS
     """ find rms of observations against propagated TLE position
 
@@ -857,7 +865,7 @@ def find_rms(satx, rd, ll, odata): ## WORKS
     return sqrt(zum / nobs)
 
 
-def print_fit(sat, rd, ll, odata): # WORKS
+def print_fit(sat, rd, ll, odata, last_rms): # WORKS
     nrr = 0
     nvv = 0
     Perr = 0
@@ -981,7 +989,7 @@ def print_fit(sat, rd, ll, odata): # WORKS
         # Format time string
         # YYday HHMM:SSsss
 
-        tsince = (odata[j][0] - sat.jdsatepoch) # TOD: Clean up tsince
+        tsince = (odata[j][0] - satx.jdsatepoch)  * 1440.0 # time since epoch in minutes # TODO: Clean up this calculation
         obstime = satx.epoch + timedelta(minutes=tsince)
         timestring = obstime.strftime('%y%j %H%M:%S')
         SSS = obstime.strftime('%f')
@@ -995,8 +1003,10 @@ def print_fit(sat, rd, ll, odata): # WORKS
         if (out):
             with open(file, "a") as fp:
                 fp.write(fit_string)
-
-    print("\nrms{:12.5f}".format(sqrt(sum / nobs)))
+    rms = sqrt(sum / nobs)
+    delta_rms = rms - last_rms
+    print("\nrms{:12.5f} ({:.5f})".format(rms, delta_rms))
+    return rms
 
 # ////////////////// FUNCTIONS //////////////////////////////////////////////////
 
@@ -1071,140 +1081,170 @@ def diff_el(sat, rd, ll, odata, sum):
 
     c = 0 
     dat = np.zeros((2,7))
-    mdata = np.zeros((150,7))
+    # mdata = np.zeros((150,7))
+    # mdata = np.empty((0,7), int)
+    mdata = []
     rv = np.zeros((6,7))
     b = np.zeros(6)
     nobs = len(odata)
 
     #loop:
-    # begin the main loop of the program
-    for i in range(nobs):
-        satx = copy.deepcopy(sat)
-        satz = copy.deepcopy(sat)                      # differential sat
+    satx = copy.deepcopy(sat)
+    while(True): # Forever loop (at least for 20 improvements)
+        # begin the main loop of the program
+        for i in range(nobs):
+            satz = copy.deepcopy(sat)                      # differential sat
 
-        delta_t(satx,odata[i][0])
+            delta_t(satx,odata[i][0])
 
-        # first establish the computed ra, dc, at jdo with no perturbations
-        (ra, dc) = zrll(satx, rd[i])     # output ra, dc, degrees
-        rac = ra                        # store computed ra and dc
-        dcc = dc
+            # first establish the computed ra, dc, at jdo with no perturbations
+            (ra, dc) = zrll(satx, rd[i])     # output ra, dc, degrees
+            rac = ra                        # store computed ra and dc
+            dcc = dc
 
-        # find the deltas and load into output matrix, dat
-        dat[0][6] = rtw(degrees(odata[i][1]), rac)      # store delta_ra
-        dat[1][6] = degrees(odata[i][2]) - dcc          # store delta_dc
+            # find the deltas and load into output matrix, dat
+            dat[0][6] = rtw(degrees(odata[i][1]), rac)      # store delta_ra
+            dat[1][6] = degrees(odata[i][2]) - dcc          # store delta_dc
 
-        # 6 steps to build differential correction matrix
-        j = 0
-        if (xi):
-            dat[0][j] = .001
-            dat[1][j] = .001
-        else:
+            # 6 steps to build differential correction matrix
+            j = 0
+            if (xi):
+                dat[0][j] = .001
+                dat[1][j] = .001
+            else:
+                delta = 0.001                        # change
+                el = copy.copy(satz.inclo)           # store reference
+                # satz.inclo += delta                  # delta element
+                satz = delta_el(satz,xincl=(satz.inclo + delta))
+                satz = delta_t(satz, odata[i][0])    # recalculate with perturbed element # FIXME python-SGP4
+                (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
+                # satz.inclo = el                      # restore reference
+                dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
+                dat[1][j] = (dc - dcc) / delta
+
+            j = 1
             delta = 0.001                        # change
-            el = copy.copy(satz.inclo)           # store reference
-            satz.inclo += delta                  # delta element
-            satz = delta_t(satz, odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
+            el = copy.copy(satz.nodeo)          # store reference
+            # satz.nodeo += delta                 # delta element
+            satz = copy.deepcopy(sat)                      # differential sat
+            satz = delta_el(satz,xnodeo=(satz.nodeo + delta))
+            satz = delta_t(satz, odata[i][0])            # recalculate with perturbed element # FIXME: python-SGP4
             (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-            satz.inclo = el                      # restore reference
+            # satz.nodeo = el                     # restore reference
             dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
             dat[1][j] = (dc - dcc) / delta
 
-        j = 1
-        delta = 0.001                        # change
-        el = copy.copy(satz.nodeo)          # store reference
-        satz.nodeo += delta                 # delta element
-        satz = delta_t(satz, odata[i][0])            # recalculate with perturbed element # FIXME: python-SGP4
-        (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-        satz.nodeo = el                     # restore reference
-        dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-        dat[1][j] = (dc - dcc) / delta
+            # Results from this one are fairly different - dat[0][j] -453 vs -474
+            j = 2
+            if (xe):
+                dat[0][j] = 0.00001
+                dat[1][j] = 0.00001
+            else:
+                delta = 0.0001                       # change
+                el = satz.ecco                         # store reference
+                # satz.ecco += delta                     # delta element
+                satz = copy.deepcopy(sat)                      # differential sat
+                satz = delta_el(satz,eo=(satz.ecco + delta))
+                satz = delta_t(satz, odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
+                (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
+                # satz.ecco = el                         # restore reference
+                dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
+                dat[1][j] = (dc - dcc) / delta
 
-        j = 2
-        if (xe):
-            dat[0][j] = 0.00001
-            dat[1][j] = 0.00001
-        else:
-            delta = 0.0001                       # change
-            el = satz.ecco                         # store reference
-            satz.ecco += delta                     # delta element
-            satz = delta_t(satz, odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
-            (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-            satz.ecco = el                         # restore reference
-            dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-            dat[1][j] = (dc - dcc) / delta
+            j = 3
+            if (xw):
+                dat[0][j] = 0.001
+                dat[1][j] = 0.001
+            else:
+                delta = 0.001                        # change
+                el = satz.argpo                     # store reference
+                # satz.argpo += delta                 # delta element
+                satz = copy.deepcopy(sat)                      # differential sat
+                satz = delta_el(satz,omegao=(satz.argpo + delta))
+                satz = delta_t(satz,odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
+                (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
+                # satz.argpo = el                     # restore reference
+                dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
+                dat[1][j] = (dc - dcc) / delta
 
-        j = 3
-        if (xw):
-            dat[0][j] = 0.001
-            dat[1][j] = 0.001
-        else:
+            j = 4
             delta = 0.001                        # change
-            el = satz.argpo                     # store reference
-            satz.argpo += delta                 # delta element
-            satz = delta_t(satz,odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
+            el = satz.mo                        # store reference
+            # satz.mo += delta                    # delta element
+            satz = copy.deepcopy(sat)                      # differential sat
+            satz = delta_el(satz,xmo=(satz.mo + delta))
+            satz = delta_t(satz,odata[i][0])            # recalculate with perturbed element # FIXME: python-SGP4
             (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-            satz.argpo = el                     # restore reference
+            # satz.mo = el                        # restore reference
             dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
             dat[1][j] = (dc - dcc) / delta
 
-        j = 4
-        delta = 0.001                        # change
-        el = satz.mo                        # store reference
-        satz.mo += delta                    # delta element
-        satz = delta_t(satz,odata[i][0])            # recalculate with perturbed element # FIXME: python-SGP4
-        (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-        satz.mo = el                        # restore reference
-        dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-        dat[1][j] = (dc - dcc) / delta
+            # TODO: Investigate whether we should perterb the no_unkozai or no_kozai (doesn't seem to make much difference)
+            j = 5
+            if (xn):
+                dat[0][j] = 0.000001
+                dat[1][j] = 0.000001
+            else:
+                delta = 0.00001                      # change
+                el = satz.no_kozai                        # store reference
+                # satz.no_kozai += delta                    # delta element
+                satz = copy.deepcopy(sat)                      # differential sat
+                satz = delta_el(satz,xno=(satz.no_kozai + delta))
+                satz = delta_t(satz,odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
+                (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
+                # satz.no_kozai = el                        # restore reference
+                dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
+                dat[1][j] = (dc - dcc) / delta
 
-        j = 5
-        if (xn):
-            dat[0][j] = 0.000001
-            dat[1][j] = 0.000001
+            # mdata[2 * i]     = dat[0]   # numerical deltas transferred to
+            # mdata[2 * i + 1] = dat[1]   # multiple regresssion matrix
+            mdata.append(dat[0])
+            mdata.append(dat[1])
+            # END for i
+
+
+        # multiple regression
+        for j in range(6):
+            for k in range (7):
+                rv[j][k] = 0
+                for i in range (nobs*2):
+                    rv[j][k] = rv[j][k] + mdata[i][j] * mdata[i][k]
+        b = rref(rv) # Returns false if singular matrix
+
+        # Getting inf and -inf on some results
+        if (np.isinf(b).any()):
+            break
+
+        saty = copy.deepcopy(sat) 
+        # test update components with deltas
+        saty.inclo    += b[0]*0.1
+        saty.nodeo    += b[1]*0.1
+        saty.ecco     += b[2]*0.1
+        saty.argpo    += b[3]*0.1
+        saty.mo       += b[4]*0.1
+        saty.no_kozai += b[5]*0.1
+        saty = delta_el(saty)
+        rms = find_rms(saty, rd, ll, odata)
+        if (rms < sum):
+            sum = rms
+            # update components with deltas
+            sat.inclo    += b[0]*0.1
+            sat.nodeo    += b[1]*0.1
+            sat.ecco     += b[2]*0.1
+            sat.argpo    += b[3]*0.1
+            sat.mo       += b[4]*0.1
+            sat.no_kozai += b[5]*0.1
+            c+=1
+            if (c < 20):
+                continue # Back up to the top of the loop
+            else:
+                break
         else:
-            delta = 0.00001                      # change
-            el = satz.no_kozai                        # store reference
-            satz.no_kozai += delta                    # delta element
-            satz = delta_t(satz,odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
-            (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-            satz.no_kozai = el                        # restore reference
-            dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-            dat[1][j] = (dc - dcc) / delta
+            break
 
-        mdata[2 * i]     = dat[0]   # numerical deltas transferred to
-        mdata[2 * i + 1] = dat[1]   # multiple regresssion matrix
-        # END for i
-
-    # multiple regression
-    for j in range(6):
-        for k in range (7):
-            rv[j][k] = 0
-            for i in range (nobs*2):
-                rv[j][k] = rv[j][k] + mdata[i][j] * mdata[i][k]
-    b = rref(rv)
-
-    saty = sat
-    # test update components with deltas
-    saty.inclo  += b[0]*0.1
-    saty.nodeo  += b[1]*0.1
-    saty.ecco   += b[2]*0.1
-    saty.argpo  += b[3]*0.1
-    saty.mo     += b[4]*0.1
-    saty.no_kozai += b[5]*0.1
-    saty = delta_el(saty)
-    rms = find_rms(saty, rd, ll, odata)
-    if (rms < sum):
-        sum = rms
-        # update components with deltas
-        sat.inclo  += b[0]*0.1
-        sat.nodeo += b[1]*0.1
-        sat.ecco     += b[2]*0.1
-        sat.argpo += b[3]*0.1
-        sat.mo    += b[4]*0.1
-        sat.no_kozai    += b[5]*0.1
-        c+=1
-        if (c < 20):
-            next # Back up to the top of the loop
     sat = delta_el(sat)
+    print("                  {} diff_el iter".format(c))
+
     return sat
     # /*
     # // display computed deltas for all 6 components and an rms
@@ -1385,9 +1425,9 @@ def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
         emax = sat.ecco * 1.01
         emin = sat.ecco * 0.99
 
-    rms_time = 0
-    dl_time = 0
-    lc = 0
+    # rms_time = 0
+    # dl_time = 0
+    # lc = 0
     while((wmax - wmin) > 1e-5):
         estep = (emax - emin) / 20
         wstep = (wmax - wmin) / 20
@@ -1410,18 +1450,18 @@ def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
                 mk = e - ek * sin(e)
                 mk = degrees(mk)
                 # satx = copy.deepcopy(sat)
-                lc+=1
-                t_start = time()
+                # lc+=1
+                # t_start = time()
                 sat = delta_el(sat, ec=ek, ww=wk, ma=mk)
-                t_end = time()
-                dl_time += (t_end-t_start)
+                # t_end = time()
+                # dl_time += (t_end-t_start)
 
                 # satx(sat.jd, ii, om, ek, wk, mk, nn, bstar) # FIXME python-SGP4
                 # establish the computed ra, dc, at jdo with no perturbations
-                t_start = time()
+                # t_start = time()
                 rms = find_rms(sat, rd, ll, odata)
-                t_end = time()
-                rms_time += (t_end-t_start)
+                # t_end = time()
+                # rms_time += (t_end-t_start)
                 if (rms < sum):
                     sum = rms
                     ec  = ek
@@ -1438,10 +1478,11 @@ def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
         wmin = degrees(sat.argpo) - wstep
         emax = sat.ecco + estep
         emin = sat.ecco - estep
-                
-    print("{} loop iterations".format(lc))
-    print("Time on find_rms: {}".format(rms_time))
-    print("Time on delta_el: {}".format(dl_time))
+               
+    # print()
+    # # print("PS: {} loop iterations".format(lc))
+    # print("                  PS: find_rms: {:.2f}".format(rms_time))
+    # print("                  PS: delta_el: {:.2f}".format(dl_time))
 
     # update mean_anomaly
     # 0.01685786247253418
@@ -1468,6 +1509,7 @@ def align(sat, rd, ll, odata):
     last = nobs - 1 # FIXME global
     satx = sat        # copy sat
 
+    delt = 1    # Give delt a starting value for the loop
     while(fabs(delt) > 1.0e-5): # FIXME global
         # advance satellite position
         delta_t(satx,odata[last][0])
@@ -1500,7 +1542,7 @@ def align(sat, rd, ll, odata):
 
 def fit_out(sat, rd, ll, odata):
     out = 1
-    print_fit(sat, rd, ll, odata)
+    sum = print_fit(sat, rd, ll, odata, sum)
     out = 0
     # accept_command()
 
@@ -1549,11 +1591,11 @@ def remove():
         iod_line[i - 1] = iod_line[i]
         nobs-=1
 
-def fit(sat, rd, ll, odata):
+def fit(sat, rd, ll, odata, sum):
     out = 0
-    print_fit(sat, rd, ll, odata)
+    sum = print_fit(sat, rd, ll, odata, sum)
     print_el(sat)
-# accept_command(sat, rd, ll, odata)
+    return sum
 
 def id():
     # requires SATID in same folder
@@ -1708,29 +1750,29 @@ def accept_command(sat, rd, ll, odata, sum, uu):
             sat = incl(sat, rd, ll, odata, sum)
         elif (cmd == "N"):  # Node
             print_el(sat)
-            sat = node(sat, rd, ll, odata)
+            sat = node(sat, rd, ll, odata, sum)
         elif (cmd == "X"):  # Eccentricity
             print_el(sat)
-            sat = xntrcty(sat, rd, ll, odata)
+            sat = xntrcty(sat, rd, ll, odata, sum)
         elif (cmd == "P"):  # Perigee
             print_el(sat)
-            sat = perigee(sat, rd, ll, odata)
+            sat = perigee(sat, rd, ll, odata, sum, uu)
         elif (cmd == "A"):  # Mean Anomaly
             print_el(sat)
-            sat = anomaly(sat, rd, ll, odata, sum)
+            sat = anomaly(sat, rd, ll, odata, sum, uu)
         elif (cmd == "M"):  # Mean Motion
             print_el(sat)
-            sat = motion(sat, rd, ll, odata)
+            sat = motion(sat, rd, ll, odata, sum)
         elif (cmd == "B"):  # Bstar
             print_el(sat)
-            sat = bstar(sat, rd, ll, odata)
+            sat = bstar(sat, rd, ll, odata, sum)
 
         elif (cmd == "D"):  # ID
             id()
         elif (cmd == "T"):  # Time
             time_func()
         elif (cmd == "F"):  # Fit
-            fit(sat, rd, ll, odata)
+            sum = fit(sat, rd, ll, odata, sum)
         elif (cmd == "V"):  # View observations
             viewobs()
         elif (cmd == "R"):  # Remove observations
@@ -1857,7 +1899,7 @@ def discover(sat, rd, ll, odata):       # partition search
     # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
 
     # print new elements
-    print_fit(sat, rd, ll, odata)
+    sum = print_fit(sat, rd, ll, odata, sum)
     print_el(sat)
 
     uu = longitude(degrees(sat.mo), degrees(sat.argpo), sat.ecco)
@@ -1870,7 +1912,7 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
     global srch
 
     nobs = len(odata)
-
+    last_rms = sum
     # update mean_anomaly
     # anomaly_search: 0.015267133712768555
     sat = anomaly_search(sat, rd, ll, odata, sum)
@@ -1898,19 +1940,28 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
 
     print("\nPress Q to Quit    :\n")
     xsum = 0
+    lc = 0
+    stp_start = time()
+    DE = 0
     while(fabs(sum-xsum)>1e-4):
+        lc+=1
         xsum = sum
+        ps_start = time()
         sat = perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin)
         # sat = delta_el(sat, omegao=radians(ww)) # Not needed as ww is returned in sat variable from above
         # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
+        ns_start = time()
         sat = node_search(sat, rd, ll, odata, sum, imax, imin, omax, omin)
         # sat = delta_el(sat, xnodeo=radians(om))
         # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
 
-        # TODO: Figure out where buf = Z comes from
+        de_start = time()
         if (nobs > 3 and step_type == 'Z'):
-            diff_el(sat, rd, ll, odata, sum)
-            sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
+            sat = diff_el(sat, rd, ll, odata, sum)
+            # sat = delta_el(sat)
+            # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
+            de_stop = time()
+            DE = de_stop - de_start
 
         # set new limits
         # FIXME: Figure out globals
@@ -1935,7 +1986,12 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
         # Shouldn't need this
         sum = find_rms(sat, rd, ll, odata)
 
-        print("rms{:12.5f}".format(sum), end='')
+        stp_lap = time()
+        lap = stp_lap - ps_start
+        PS = ns_start - ps_start
+        NS = de_start - ns_start
+        ELAPSED = stp_lap - stp_start
+        print("rms{:12.5f}   Lap time: {:.2f}  PS {:.2f}  NS {:.2f}  DE {:.2f}   --  Elapsed {:.1f} / {}".format(sum, lap, PS, NS, DE, ELAPSED, lc))
         # buf = input("    : ")
 
         # try:
@@ -1945,7 +2001,11 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
         # except NameError:
         #     continue
 
-    print_fit(sat, rd, ll, odata)
+    print()
+    # print("Step: {} loop iterations".format(lc))
+
+
+    sum = print_fit(sat, rd, ll, odata, last_rms)
     print_el(sat)       # print new elements
 
     srch = 'N' # FIXME: Fix this global
@@ -1955,19 +2015,18 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
 def incl(sat, rd, ll, odata, sum):
     global srch
 
-    print("\n(A)uto  (ii)  (Q)uit  ")
-    buf = input(": ").strip()
-
     ii = degrees(sat.inclo)
     om = degrees(sat.nodeo)
 
     while(True): # Forever loop
+        print("\n(A)uto  (ii)  (Q)uit  ")
+        buf = input(": ").strip()
+
         try: 
             ii = float(buf)
             xi = 1
             sat = delta_el(sat, ii=ii)
-            # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-            print_fit(sat, rd, ll, odata)
+            sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)       # print new elements
         except:
             buf = buf.upper()
@@ -1980,35 +2039,36 @@ def incl(sat, rd, ll, odata, sum):
                 omin = om - 2
                 xi = 0
 
-                print("\nimax [{:.4f}".format(imax))
-                buf = input("]: ")
-                imax = float(buf.strip())
+                ## This doesn't seem very "auto"
+                # TODO: Add in a "seach" options which presents these
+                # print("\nimax [{:.4f}".format(imax))
+                # buf = input("]: ")
+                # imax = float(buf.strip())
 
-                print("\nimin [{:.4f}".format(imin))
-                buf = input("]: ")
-                imin = float(buf.strip())
+                # print("\nimin [{:.4f}".format(imin))
+                # buf = input("]: ")
+                # imin = float(buf.strip())
 
-                print("\nomax [{:.4f}".format(omax))
-                buf = input("]: ")
-                omax = float(buf.strip())
+                # print("\nomax [{:.4f}".format(omax))
+                # buf = input("]: ")
+                # omax = float(buf.strip())
                 
-                print("\nomin [{:.4f}".format(omin))
-                buf = input("]: ")
-                omin = float(buf.strip())
+                # print("\nomin [{:.4f}".format(omin))
+                # buf = input("]: ")
+                # omin = float(buf.strip())
 
                 sat = node_search(sat, rd, ll, odata, sum, imax, imin, omax, omin)
 
                 # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-                print_fit(sat, rd, ll, odata)
+                sum = print_fit(sat, rd, ll, odata, sum)
                 print_el(sat)       # print new elements
 
                 srch = 'N' # FIXME: Fix this global
             elif (buf == 'Q'):
                 return sat
 
-def node(sat, rd, ll, odata):
+def node(sat, rd, ll, odata, sum):
     global srch
-    global sum
 
     while(True): # Froever loop
         om = degrees(sat.nodeo)
@@ -2018,8 +2078,8 @@ def node(sat, rd, ll, odata):
 
         try:
             om = float(buf)
-            sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-            print_fit(sat, rd, ll, odata)
+            sat = delta_el(sat,om=om)
+            sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)       # print new elements
         except:
             buf = buf.upper()
@@ -2032,13 +2092,14 @@ def node(sat, rd, ll, odata):
                 omax = om + 2
                 omin = om - 2
 
-                print("\nomax [{:.4f}".format(omax))
-                buf = input("]: ")
-                omax = float(buf.strip())
+                ## This doesn't seem very "auto"
+                # print("\nomax [{:.4f}".format(omax))
+                # buf = input("]: ")
+                # omax = float(buf.strip())
                 
-                print("\nomin [{:.4f}".format(omin))
-                buf = input("]: ")
-                omin = float(buf.strip())
+                # print("\nomin [{:.4f}".format(omin))
+                # buf = input("]: ")
+                # omin = float(buf.strip())
 
                 while((omax - omin) > 1e-5):
                     ostep = fabs(rtw(omax, omin) / 20)
@@ -2055,11 +2116,11 @@ def node(sat, rd, ll, odata):
 
                     omin = om - ostep
                     omax = om + ostep
-                om = fmod(om, 360)
+                # om = fmod(om, 360)
 
                 sat = delta_el(satx,om=om)
                 # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-                print_fit(sat, rd, ll, odata)
+                sum = print_fit(sat, rd, ll, odata, sum)
                 print_el(sat)       # print new elements
 
                 srch = 'N' # FIXME: Fix this global variable
@@ -2067,9 +2128,8 @@ def node(sat, rd, ll, odata):
                 return sat
 
 
-def xntrcty(sat, rd, ll, odata):
+def xntrcty(sat, rd, ll, odata, sum):
     global srch
-    global sum
     global xe
 
     while(True): # Forever loop
@@ -2085,8 +2145,7 @@ def xntrcty(sat, rd, ll, odata):
             ec = float(buf)
             xe = 1
             sat = delta_el(sat,ec=ec)
-            # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-            print_fit(sat, rd, ll, odata)
+            sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)       # print new elements
         except:
             buf = buf.upper()
@@ -2095,19 +2154,19 @@ def xntrcty(sat, rd, ll, odata):
             if (buf == 'A'):
                 xe = 0
 
-                print("\nemax [{:.7f}".format(emax))
-                buf = input("]: ")
-                emax = float(buf.strip())
+                ## Commenting this out, as it doesn't seem very "auto"
+                # print("\nemax [{:.7f}".format(emax))
+                # buf = input("]: ")
+                # emax = float(buf.strip())
 
-                print("\nemin [{:.7f}".format(emin))
-                buf = input("]: ")
-                emin = float(buf.strip())
+                # print("\nemin [{:.7f}".format(emin))
+                # buf = input("]: ")
+                # emin = float(buf.strip())
 
                 while((emax - emin) > 1.e-8):
                     estep = (emax - emin) / 20
                     for ek in np.arange(emin, emax, estep):
                         sat = delta_el(sat,ec=ek)
-                        # sat.delta_el(sat.jd, ii, om, ek, ww, ma, nn, bstar)
                         # establish the computed ra, dc, at jdo with no perturbations
                         rms = find_rms(sat, rd, ll, odata)
                         if (rms < sum):
@@ -2115,13 +2174,11 @@ def xntrcty(sat, rd, ll, odata):
                             ec = ek
                         # end for ek
                     sat = delta_el(sat,ec=ec)
-                    # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
                     emin = ec - estep
                     emax = ec + estep
 
                 sat = delta_el(sat,ec=ec)
-                # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-                print_fit(sat, rd, ll, odata)
+                sum = print_fit(sat, rd, ll, odata, sum)
                 print_el(sat)       # print new elements
 
                 srch = 'N' # FIXME this global
@@ -2146,33 +2203,26 @@ def xntrcty(sat, rd, ll, odata):
                 print("\neccentricity  sum")
                 for ec in np.arange(emin,emax + estep, estep):
                     sat = delta_el(sat,ec=ec)
-                    # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
                     sum = find_rms(sat, rd, ll, odata)
                     print("\n{:.7f}     {:7.4f}", ec, sum)
 
                 print()
                 ec = ek
                 sat = delta_el(sat,ec=ec)
-                # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
 
             elif (buf == 'Q'):
                 return sat
 
-def perigee(sat, rd, ll, odata):
+def perigee(sat, rd, ll, odata, sum, uu):
     global srch
-    global uu
     global xw
 
     while(True): # Forever loop
-        # pgee = (1-sat.ecco)*sat.aodp
-        # agee = (1+sat.ecco)*sat.aodp
+        pgee = int((sat.altp)*sat.radiusearthkm)
+        agee = int( (sat.alta)*sat.radiusearthkm)
 
-
-        print("\nPerigee = {} er".format(1+sat.altp))
-        print("     {:d} X {:d} km".format(
-            int( (1+sat.altp)*sat.radiusearthkm),
-            int( (1+sat.alta)*sat.radiusearthkm) )
-            )
+        print("\nPerigee = {:.6f} er".format(1+sat.altp), end="")
+        print("     {:d} X {:d} km".format(pgee, agee))
 
         print("\n(S)earch  (A)uto  (ww)  (Q)uit  ")
         buf = input(": ").strip()
@@ -2183,7 +2233,7 @@ def perigee(sat, rd, ll, odata):
             ma = ww2ma(ww)
             xw = 1
             sat.delta_el(sat, ww=ww, ma=ma)
-            print_fit(sat, rd, ll, odata)
+            sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)       # print new elements
         except:
             buf = buf.upper()
@@ -2194,14 +2244,14 @@ def perigee(sat, rd, ll, odata):
                 wx = ww + 1
                 while(fabs(wx - ww) > 1e-4):
                     wx = ww
-                    print("\n{:8.4f}  {:.7f}".format(ww, ec))
+                    print("\n{:8.4f}  {:.7f}".format(ww, sat.ecco))
                     wmax = ww + 1
                     wmin = ww - 1
-                    emax = ec * 1.01
-                    emin = ec * 0.99
+                    emax = sat.ecco * 1.01
+                    emin = sat.ecco * 0.99
                     sat = perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin)
                     # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-                print_fit(sat, rd, ll, odata)
+                sum = print_fit(sat, rd, ll, odata, sum)
                 print_el(sat)       # print new elements
 
                 srch = 'N' # FIXME Global
@@ -2209,6 +2259,9 @@ def perigee(sat, rd, ll, odata):
             # SEARCH
             elif (buf == 'S'):
                 uu = longitude(degrees(sat.mo), degrees(sat.argpo), sat.ecco)
+                
+                ww = degrees(sat.argpo)
+                ma = degrees(sat.mo)
                 wmax = ww + 2
                 wmin = ww - 2
                 wstep = 20
@@ -2263,9 +2316,7 @@ def perigee(sat, rd, ll, odata):
     # print("\nE Longitude = {:8.4f}".format(amax))
 
 
-def anomaly(sat, rd, ll, odata, sum):
-    global uu
-    global nn
+def anomaly(sat, rd, ll, odata, sum, uu):
     global srch
 
     while(True): # Forever loop
@@ -2298,7 +2349,7 @@ def anomaly(sat, rd, ll, odata, sum):
             uu = longitude(degrees(sat.mo), degrees(sat.argpo), sat.ecco)
             sat = delta_el(sat, ma=ma)
             # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-            print_fit(sat, rd, ll, odata)
+            sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)       # print new elements
         except:
             buf = buf.upper()
@@ -2307,7 +2358,7 @@ def anomaly(sat, rd, ll, odata, sum):
             if (buf == 'A'):
                 sat = anomaly_search(sat, rd, ll, odata, sum)
                 # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-                print_fit(sat, rd, ll, odata)
+                sum = print_fit(sat, rd, ll, odata, sum)
                 print_el(sat)       # print new elements
                 srch = 'N'   # FIXME Global
             # SEARCH
@@ -2335,13 +2386,15 @@ def anomaly(sat, rd, ll, odata, sum):
                 print()
                 ma = mk              # restore
                 sat = delta_el(sat,ma=ma)
+                sum = print_fit(sat, rd, ll, odata, sum)
+                print_el(sat)       # print new elements
 
             # LAST
             elif (buf == 'L'):
                 sat = align(sat, rd, ll, odata)
                 # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
                 uu = longitude(degrees(sat.mo), degrees(sat.argpo), sat.ecco)
-                print_fit(sat, rd, ll, odata)
+                sum = print_fit(sat, rd, ll, odata, sum)
                 print_el(sat)       # print new elements
 
             # QUIT
@@ -2349,10 +2402,10 @@ def anomaly(sat, rd, ll, odata, sum):
                 return sat
 
 
-def motion(sat, rd, ll, odata):
-    while(True): # Forever loop
-        global xn
+def motion(sat, rd, ll, odata, sum):
+    global xn
 
+    while(True): # Forever loop
         print("\n(A)uto  (nn)  (Q)uit  ")
         buf = input(": ").strip()
 
@@ -2361,7 +2414,7 @@ def motion(sat, rd, ll, odata):
             xn = 1
             sat = delta_el(sat, nn=nn)
             # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-            print_fit(sat, rd, ll, odata)
+            sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)       # print new elements
         except:
             buf = buf.upper()
@@ -2372,13 +2425,13 @@ def motion(sat, rd, ll, odata):
                 # update mean motion, no limits
                 sat = motion_search(sat, rd, ll, odata)
                 # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-                print_fit(sat, rd, ll, odata)
+                sum = print_fit(sat, rd, ll, odata, sum)
                 print_el(sat)       # print new elements
             elif (buf == 'Q'):
                 return sat
 
 
-def bstar(sat, rd, ll, odata):
+def bstar(sat, rd, ll, odata, sum):
     while(True): # Forever loop
         print("\n(A)uto  (b*)  (B)atch  (Q)uit  ")
         buf = input(": ").strip()
@@ -2389,7 +2442,7 @@ def bstar(sat, rd, ll, odata):
             bstar = float(buf)
             sat = delta_el(sat,bstar=bstar)
             # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-            print_fit(sat, rd, ll, odata)
+            sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)       # print new elements
         except:
             buf = buf.upper()
@@ -2403,13 +2456,15 @@ def bstar(sat, rd, ll, odata):
                     bmax = bmin
                     bmin = bstar * 1.1
 
-                print("\nbmax [{:.8f}".format(bmax))
-                buf = input("]: ").strip()
-                bmax = float(buf)
+                ## This doesn't seem very "auto"
+                # TODO: make "Search" version
+                # print("\nbmax [{:.8f}".format(bmax))
+                # buf = input("]: ").strip()
+                # bmax = float(buf)
 
-                print("\nbmin [{:.8f}".format(bmin))
-                buf = input("]: ").strip()
-                bmin = float(buf)
+                # print("\nbmin [{:.8f}".format(bmin))
+                # buf = input("]: ").strip()
+                # bmin = float(buf)
 
                 while((bmax - bmin) > 1.e-9):
                     bstep = (bmax - bmin) / 20
@@ -2428,7 +2483,7 @@ def bstar(sat, rd, ll, odata):
 
                 sat = delta_el(sat,bstar=bstar)
                 # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-                print_fit(sat, rd, ll, odata)
+                sum = print_fit(sat, rd, ll, odata, sum)
                 print_el(sat)       # print new elements
 
             # BATCH
@@ -2478,10 +2533,10 @@ def bstar(sat, rd, ll, odata):
                 # // system(file_in);
                 # sys.exit(0)
             elif (buf == 'Q'):
-                accept_command()
+                return sat
 
 
-def maneuver(sat, rd, ll, odata):
+def maneuver(sat, rd, ll, odata, sum):
     # Make a copy of original sat
     save_sat = copy.deepcopy(sat)
     nobs = len(odata)
@@ -2509,7 +2564,7 @@ def maneuver(sat, rd, ll, odata):
             nobs  = nobs - p + 1
 
             out = 0
-            print_fit(sat, rd, ll, odata)
+            sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)
             print("\nperiod = %f days".format(nocon/sat.xno))
         except:
@@ -2901,7 +2956,6 @@ def main():
 
     # # Most popular const used by TLEs
     whichconst = earth_gravity.wgs72
-    afspc_mode = False
 
     # # (rr,vv) = sgp4(id_satrec, tsince=0, whichconst=whichconst)
     # id_sat = sgp4.io.twoline2rv(UNIDsat.line1, UNIDsat.line2, whichconst, afspc_mode=False)
@@ -2922,7 +2976,7 @@ def main():
     sat.epoch = FitSat.epoch
     sat.intldesg = FitSat.designation
 
-    sgp4init(whichconst, afspc_mode, satn, epoch, bstar, 0, 0, ec, ww, ii, ma, nn, om, sat)
+    sgp4init(whichconst, False, satn, epoch, bstar, 0, 0, ec, ww, ii, ma, nn, om, sat)
 #    sgp4init(satn, epoch, bstar, 0, 0, ec, ww, ii, ma, nn, om, sat)
 #    sgp4init(whichconst, afspc_mode, satn, epoch, bstar, ec, ww, ii, ma, nn, om, sat)
  
