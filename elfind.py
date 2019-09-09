@@ -372,13 +372,13 @@ def so2rv(od, rd, ll):
 
 def rref(m): # scaled partial pivoting
   """ gaussian elimination """
-  s = np.zeros(5)
-  b = np.zeros(5)
+  s = np.zeros(6)
+  b = np.zeros(6)
   
   # calculate scale factors
-  for i in range(5):
+  for i in range(6):
     s[i] = abs(m[i][0])
-    for j in range(1, 5):
+    for j in range(1, 6):
       if (s[i] < abs(m[i][j])):
         s[i] = abs(m[i][j])
   # end for i
@@ -392,22 +392,35 @@ def rref(m): # scaled partial pivoting
 
     if (ROW != j):
       for k in range (j, 6):     # swap rows
-        bin = m[j][k]
+        binv = m[j][k]
         m[j][k] = m[ROW][k]
-        m[ROW][k] = bin
+        m[ROW][k] = binv
 
-      bin = s[j]                 # swap scales
+      binv = s[j]                 # swap scales
       s[j] = s[ROW]
-      s[ROW] = bin
+      s[ROW] = binv
     # end if
+  # end for j
 
-    # Alternate reference https://math.stackexchange.com/questions/2950727/gaussian-elimination-in-numerical
-    # forward elimination 
-    for i in range(j + 1, 5):
-      mult = m[i][j] / m[j][j]
-      for k in range(j + 1, 6):
+    # # Alternate reference https://math.stackexchange.com/questions/2950727/gaussian-elimination-in-numerical
+    # # forward elimination 
+  # for i in range(j + 1, 6):
+  #   mult = m[i][j] / m[j][j]
+  #   for k in range(j + 1, 7):
+  #     m[i][k] = m[i][k] - mult * m[j][k]
+  #   m[i][j] = 0
+  # # end for i
+
+  for j in range (6):
+    mult = m[j][j]
+    if (mult):
+      for k in range (j, 7):
+        m[j][k] = m[j][k] / mult
+    for i in range(j + 1, 6):
+      mult = m[i][j]
+      for k in range (j + 1, 7):
         m[i][k] = m[i][k] - mult * m[j][k]
-      m[i][j] = 0
+        m[i][j] = 0
     # end for i
   # end for j
 
@@ -415,8 +428,8 @@ def rref(m): # scaled partial pivoting
   # Ref: https://stackoverflow.com/questions/13249108/efficient-pythonic-check-for-singular-matrix
   if np.linalg.cond(m) > 1/np.finfo(m.dtype).eps:
     log.error("Singular matrix")
-    sys.exit()
-   
+    return [float("Inf")]
+
   # Alternate reference https://math.stackexchange.com/questions/2950727/gaussian-elimination-in-numerical
   # back sustitution
   b[5] = m[5][6] / m[5][5]
@@ -424,7 +437,7 @@ def rref(m): # scaled partial pivoting
     bin = 0
     for k in range(i + 1, 5):
       bin = bin + m[i][k] * b[k]
-    b[i] = (m[i][6] - bin) / m[i][i]
+    b[i] = (m[i][6] - bin) / m[i][i] # this line was giving an error at some points: "RuntimeWarning: divide by zero encountered in double_scalars"
   return b
 # end rref
 
