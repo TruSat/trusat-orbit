@@ -32,13 +32,11 @@ sys.path.insert(2, '/Users/chris/Dropbox/code/MVP/python-skyfield')
 # from skyfield.iokit import Loader, download, parse_tle
 # from skyfield import sgp4lib
 
-from sgp4.propagation import sgp4, sgp4init
-
-# try:
-#     from sgp4.cpropagation import sgp4, sgp4init
-# except ImportError as e:
-#     print(e)
-#     from sgp4.propagation import sgp4, sgp4init
+try:
+    from sgp4.cpropagation import sgp4, sgp4init
+except ImportError as e:
+    print(e)
+    from sgp4.propagation import sgp4, sgp4init
 from sgp4.ext import invjday, days2mdhms
 from sgp4.io import twoline2rv
 from sgp4.model import Satellite
