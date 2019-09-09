@@ -91,7 +91,8 @@ def mag(v):
     Renamed from norm(v) in original Scott Campbell code
     to better correspond to function names in SGP4 code.
     """
-    return np.sqrt(np.dot(v, v))
+    mag = np.sqrt(np.dot(v, v))
+    return mag
 
 
 def main():
