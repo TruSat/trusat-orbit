@@ -14,7 +14,7 @@ import argparse                     # command line parsing
 import os
 from datetime import date, timedelta, datetime
 from time import time                         # For performance timing
-from math import (acos, asin, atan, cos, sin, tan, degrees)    # Fast/precise math functions                      
+from math import acos, asin, atan, cos, sin, tan, degrees    # Fast/precise math functions                      
 import numpy as np
 import logging
 import string
@@ -42,6 +42,7 @@ def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
     return vector / mag(vector)
 
+
 def proj(v2, v1):
     """ Returns the unit vector projection of v1 onto v2 """
     b = np.dot(v2, v1)/np.dot(v2, v2)
@@ -50,6 +51,7 @@ def proj(v2, v1):
     # Make unit vector
     vp = unit_vector(temp)
     return vp
+
 
 def flat_proj(v1, v2):
     """ Returns the flat projection of direction unit vector, v1 onto v2 """
@@ -88,7 +90,7 @@ def angle_between(v1, v2):
 def mag(v):
     """ Computes the magnitude of a vector ||v|| 
 
-    Renamed from norm(v) in original Scott Campbell code
+    Renamed from norm(v) used in original Scott Campbell code
     to better correspond to function names in SGP4 code.
     """
     mag = np.sqrt(np.dot(v, v))
