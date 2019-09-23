@@ -4,8 +4,8 @@ import sys
 import os # Only needed for paths while our repos are not public
 import configargparse
 
-if sys.version_info[0] != 3 or sys.version_info[1] < 7:
-    print("This script requires Python version 3.7")
+if sys.version_info[0] != 3 or sys.version_info[1] < 6:
+    print("This script requires Python version 3.6")
     sys.exit(1)
 
 import os, re, csv

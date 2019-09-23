@@ -51,13 +51,13 @@ from sgp4 import earth_gravity
 import inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
-tle_path = os.path.join(parentdir, "sathunt-tle")
+tle_path = os.path.join(parentdir, "trusat-tle")
 sys.path.insert(1,tle_path) 
 from tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetime_from_tle_fmt, assumed_decimal_point, checksum_tle_line, myjday, TruSatellite
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
-iod_path = os.path.join(parentdir, "sathunt-iod")
+iod_path = os.path.join(parentdir, "trusat-iod")
 sys.path.insert(1,iod_path) 
 import iod
 
