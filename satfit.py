@@ -53,16 +53,14 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(currentdir)
 tle_path = os.path.join(parentdir, "trusat-tle")
 sys.path.insert(1,tle_path) 
-from tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetime_from_tle_fmt, assumed_decimal_point, checksum_tle_line, myjday, TruSatellite
+# FIXME: At some point, just evaluate importing the whole thing, or refactor calling functions to largely be in TLE_util
+from tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetime_from_tle_fmt, assumed_decimal_point, checksum_tle_line, myjday, TruSatellite, make_tle_from_SGP4_satrec
 
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
+
 iod_path = os.path.join(parentdir, "trusat-iod")
 sys.path.insert(1,iod_path) 
 import iod
 
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
 db_path = os.path.join(parentdir, "sathunt-database")
 sys.path.insert(1,db_path) 
 import database
@@ -242,7 +240,7 @@ nstep = None
 #         self.bstar = bstar
 
 #     def sxp4(self, tsince):
-#         # /* Period > 225 minutes is deep space */
+#         # /* Period > 225 minutes is deep sIe */
 #         # python-SGP4 determines this automatically, however
 #         a1 = pow(xke / xno, 2/3.0)
 #         r1 = cos(xincl)
@@ -632,7 +630,7 @@ def read_obssf(IOD_Records, Stations=None):
     nobs = len(IOD_Records) # Number of iod-compliant formatted lines in the input file
 
     ll    = np.zeros((nobs,3))
-    odata = np.zeros((nobs,4))
+    odata = np.zeros((nobs,5))
     rd    = np.zeros((nobs,3))
 
     i = 0
@@ -700,6 +698,7 @@ def read_obssf(IOD_Records, Stations=None):
         odata[i][1] = ra # ra radians (observed)
         odata[i][2] = dc # dc radians (observed)
         odata[i][3] = iod_line.Station # station
+        odata[i][4] = iod_line.obs_id # Database observation id (ParsedIOD.obs_id). This inconveniently stores as a float, since its going into a numpy array.
 
         # (la, lo, hh) = Sites.topos(iod_line.Station)
         # observer_location = Topos(latitude_degrees = la, longitude_degrees = lo, elevation_m = hh)
@@ -721,49 +720,35 @@ def read_obssf(IOD_Records, Stations=None):
     # end for
     return odata, ll, rd, t1
 
+
 def print_el(sat, deg=False, quiet=False):
-    """ write TLE to output file and to screen """
+    """ print TLE to screen """
 
-    # ssn               Spacecraft number
-    # desig             International Designation
-    # epoch_datetime    Epoch in pythonDATETIME format
-    # xincl             inclination
-    # xnodeo            RAAN
-    # eo                eccentricity
-    # omegao            argument of perigee
-    # xmo               mean anomaly
-    # xno               mean motion
-    # TODO: Find standard variable names for First Derivative xno, Second derivative xno, Bstar
+    newTLE = make_tle_from_SGP4_satrec(sat,classification="T")
 
-    line0 = None
-    tle_epoch = tle_fmt_epoch(sat.epoch)
-    eo_string = assumed_decimal_point(sat.ecco,7)
+    # tle_epoch = tle_fmt_epoch(sat.epoch)
 
-    if (deg==False):
-        xincl  = degrees(sat.inclo)
-        xnodeo = degrees(sat.nodeo)
-        omegao = degrees(sat.argpo)
-        xmo    = degrees(sat.mo)
-        xno    = sat.no_kozai/nocon
+    # if (deg==False):
+    #     xincl  = degrees(sat.inclo)
+    #     xnodeo = degrees(sat.nodeo)
+    #     omegao = degrees(sat.argpo)
+    #     xmo    = degrees(sat.mo)
+    #     xno    = sat.no_kozai/nocon
 
-    # if name:
-    #     line0  = "{:24s}".format(name) 
-    #     if not quiet:
-    #         print("{:s}".format(line0))
+    # line1 = "1 {:5d}U {:<8s} {:14s} 0.00000073  00000-0  50000-4 0    00".format(sat.satnum,sat.intldesg,tle_epoch)
+    # # TODO: Deal with First Derivative xno, Second derivative xno, Bstar
+    # line2 = "2 {:05d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}    00".format(
+    #         sat.satnum, xincl, xnodeo, eo_string, omegao, xmo, xno)
 
-    line1 = "1 {:5d}U {:<8s} {:14s} 0.00000073  00000-0  50000-4 0    00".format(sat.satnum,sat.intldesg,tle_epoch)
-    # TODO: Deal with First Derivative xno, Second derivative xno, Bstar
-    line2 = "2 {:05d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}    00".format(
-            sat.satnum, xincl, xnodeo, eo_string, omegao, xmo, xno)
-
-    line1 = line1[:68] + str(checksum_tle_line(line1))
-    line2 = line2[:68] + str(checksum_tle_line(line2))
+    # line1 = line1[:68] + str(checksum_tle_line(line1))
+    # line2 = line2[:68] + str(checksum_tle_line(line2))
 
     if not quiet:
         print()
-        print("{:s}".format(line1))
-        print("{:s}".format(line2))
-    return(line0, line1, line2)
+        print("{:s}".format(newTLE.line0))
+        print("{:s}".format(newTLE.line1))
+        print("{:s}".format(newTLE.line2))
+    return(newTLE.line0, newTLE.line1, newTLE.line2)
 
 
 def longitude(sat):
@@ -880,11 +865,13 @@ def find_rms(satx, rd, ll, odata):
         zum += Perr*Perr
     return sqrt(zum / nobs)
 
+# Version of print_fit intended to be non-interactive and store fit to variables
+# New TruSat development in this version, to preserve original functionality of print_fit
 def calc_fit(sat, rd, ll, odata, last_rms, TLE_process):
     nobs = len(odata)
     if (nobs == 0):
-        print("\nno obs")
-        return
+        log.error("\nno obs")
+        return False
 
     nrr = 0
     nvv = 0
@@ -989,28 +976,34 @@ def calc_fit(sat, rd, ll, odata, last_rms, TLE_process):
         Perr = degrees(Perr)
         sum += Perr*Perr
 
-        # Format time string
-        # YYday HHMM:SSsss
-        tsince = (odata[j][0] - sat.jdsatepoch) * 1440.0 # time since epoch in minutes # TODO: Clean up this calculation
-        obstime = sat.epoch + timedelta(minutes=tsince)
-        timestring = obstime.strftime('%y%j %H%M:%S')
-        SSS = obstime.strftime('%f')
-        SSS = int(1000*(int(SSS)/1E6))
-        fit_string = "({:2d}) {:04d}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}".format(
-            j + 1, int(odata[j][3]), timestring, SSS, az, el, asp, xtrk, delt, Perr)
-        print(fit_string)
+        # # Format time string
+        # # YYday HHMM:SSsss
+        # tsince = (odata[j][0] - sat.jdsatepoch) * 1440.0 # time since epoch in minutes # TODO: Clean up this calculation
+        # obstime = sat.epoch + timedelta(minutes=tsince)
+        # timestring = obstime.strftime('%y%j %H%M:%S')
+        # SSS = obstime.strftime('%f')
+        # SSS = int(1000*(int(SSS)/1E6))
+        # fit_string = "({:2d}) {:04d}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}".format(
+        #     j + 1, int(odata[j][3]), timestring, SSS, az, el, asp, xtrk, delt, Perr)
+        # print(fit_string)
 
-        # need to populate odata[j][4] with obs_id
-        TLE_process[odata[j][4]]["aspect"]          = asp
-        TLE_process[odata[j][4]]["cross_track_err"] = xtrk
-        TLE_process[odata[j][4]]["time_err"]        = delt
-        TLE_process[odata[j][4]]["position_err"]    = Perr
-        TLE_process[odata[j][4]]["obs_weight"]      = weight
+        obs_id = int(odata[j][4])   # FIXME Need to convert to int from numpy float. Probably a better way to store all this.
+        TLE_process.update(
+            { obs_id : 
+                {
+                    "aspect"          : asp,
+                    "cross_track_err" : xtrk,
+                    "time_err"        : delt,
+                    "position_err"    : Perr,
+                    "obs_weight"      : weight                   
+                }
+            }
+        )
 
     rms = sqrt(sum / nobs)
-    delta_rms = rms - last_rms
-    print("\nrms{:12.5f} ({:.5f})".format(rms, delta_rms))
-    return rms
+    # delta_rms = rms - last_rms
+    # print("\nrms{:12.5f} ({:.5f})".format(rms, delta_rms))
+    return rms, TLE_process
 
 
 def print_fit(sat, rd, ll, odata, last_rms): # WORKS
@@ -1138,7 +1131,7 @@ def print_fit(sat, rd, ll, odata, last_rms): # WORKS
         # YYday HHMM:SSsss
 
         tsince = (odata[j][0] - satx.jdsatepoch) * 1440.0 # time since epoch in minutes # TODO: Clean up this calculation
-        obstime = satx.epoch + timedelta(minutes=tsince)
+        obstime = satx.epoch_datetime + timedelta(minutes=tsince)
         timestring = obstime.strftime('%y%j %H%M:%S')
         SSS = obstime.strftime('%f')
         SSS = int(1000*(int(SSS)/1E6))
@@ -1860,7 +1853,7 @@ def history(sat, rd, ll, odata):
             return True
 
 
-def accept_command(sat, rd, ll, odata, sum, uu, iod_line):
+def accept_command(db, sat, rd, ll, odata, sum, uu, iod_line):
     """Accept a new command"""
 
     while(True):    # Forever loop
@@ -1870,6 +1863,8 @@ def accept_command(sat, rd, ll, odata, sum, uu, iod_line):
 
         cmd = input(": ").strip()
         cmd = cmd.upper()
+
+        start_rms = sum
 
         # Hidden functions
         if (cmd == "G"):    # Graph fit
@@ -1912,7 +1907,7 @@ def accept_command(sat, rd, ll, odata, sum, uu, iod_line):
             sat = motion(sat, rd, ll, odata, sum)
         elif (cmd == "B"):  # Bstar
             print_el(sat)
-            sat = bstar(sat, rd, ll, odata, sum)
+            sat = bstar_func(sat, rd, ll, odata, sum)
 
         elif (cmd == "D"):  # ID
             id()
@@ -1925,9 +1920,9 @@ def accept_command(sat, rd, ll, odata, sum, uu, iod_line):
         elif (cmd == "R"):  # Remove observations
             (rd, ll, odata, iod_line) = remove(rd, ll, odata, iod_line)
         elif (cmd == "W"):  # Write elements
-            write_el(sat)
+            write_el(db, sat, rd, ll, odata, sum, start_rms)
         elif (cmd == "Q"):  # Quit
-            main()
+            main(db)
     
 def discover(sat, rd, ll, odata):       # partition search
     global srch   # FIXME global variable
@@ -2578,7 +2573,7 @@ def motion(sat, rd, ll, odata, sum):
                 return sat
 
 
-def bstar(sat, rd, ll, odata, sum):
+def bstar_func(sat, rd, ll, odata, sum):
     while(True): # Forever loop
         print("\n(A)uto  (b*)  (B)atch  (Q)uit  ")
         buf = input(": ").strip()
@@ -2921,20 +2916,31 @@ def maneuver(sat, rd, ll, odata, sum):
                 break
     return sat
 
-def write_el(sat):
+def write_el(db, sat, rd, ll, odata, sum, start_rms):
+    """
+    Function to interact with source, and updated TLEs, including insert to TruSat database.
+
+    TODO: Not sure what it should 'return' as it nominally does not update in the working variables.
+    """
     save_sat = copy.deepcopy(sat)
     while(True): # Forever loop
-        tle = sat.epoch
-        ii = degrees(sat.inclo)
-        om = degrees(sat.nodeo)
-        ec = sat.ecco
-        ww = degrees(sat.argpo)
-        ma = degrees(sat.mo)
-        nn = sat.no_kozai / nocon
-        c2 = sat.c2
-        bstar = sat.bstar
+        newTLE = make_tle_from_SGP4_satrec(sat,classification="T")
+        # tle = sat.epoch
+        # ii = degrees(sat.inclo)
+        # om = degrees(sat.nodeo)
+        # ec = sat.ecco
+        # ww = degrees(sat.argpo)
+        # ma = degrees(sat.mo)
+        # nn = sat.no_kozai / nocon
+        # c2 = sat.c2
+        # bstar = sat.bstar
 
-        print("\n(U)pdate (V)iew (A)ppend (O)riginal (R)estore (Q)uit")
+        print("\n(U)pdate (V)iew (A)ppend (O)riginal (R)estore", end='')
+        if (db):
+            print("\nDATABASE: (I)nsert new TLE (Q)uit", end='')
+        else:
+            print(" (Q)uit")
+
         buf = input(": ").strip().upper()
 
         # Append
@@ -2953,9 +2959,9 @@ def write_el(sat):
         elif (buf == 'R'):
             # replace TLE in file with original
             with open(file, "w") as fp:
-                fp.write("{:s}".format(sat.name))
-                fp.write("{:s}".format(sat.tle_line1))
-                fp.write("{:s}".format(sat.tle_line2))
+                fp.write("{:s}".format(TLE.name))
+                fp.write("{:s}".format(TLE.line1))
+                fp.write("{:s}".format(TLE.line2))
                 for range in (nobs): # FIXME More pythonic way
                     fp.write("{:s}".format(iod_line[i]))
             # replace working elements with original
@@ -2977,6 +2983,18 @@ def write_el(sat):
                 fp.write("{:s}\n\n".format(line2))
                 for i in range(nobs): # FIXME More pythonic way
                     fp.write("{:s}".format(iod_line[i]))
+        # Insert TLE and TLE_process results to database
+        elif (buf == 'I'):
+            newTLE_process = {}
+            (sum, newTLE_process) = calc_fit(sat, rd, ll, odata, sum, newTLE_process)
+
+            remarks = input("TLE Remarks for TLE_process record: ").strip()
+
+            result = db.addTruSatTLE(newTLE, newTLE_process, sat.parent_tle_id, start_rms, sum, remarks)
+            if (result):
+                main(db)
+            else:
+                log.error("DB Insert failed.")
         # QUIT write_el
         elif (buf == 'Q'):
             return True
@@ -3081,11 +3099,14 @@ def initsat(TLE,gravconst="wgs72"):
 
     # TODO: Once mean_motion_radians_per_minute is added to the DB, use it directly here
     satrec.no_kozai       = TLE.mean_motion_orbits_per_day * nocon # rad/min
-    satrec.revnum         = TLE.orbit_num
+    satrec.revnum         = TLE.orbit_number
 
     # Derived quantities
-    satrec.jdsatepoch     = TLE.jdsatepoch  # Julian date
-    satrec.epoch          = TLE.epoch       # Python datetime
+    satrec.jdsatepoch     = TLE.jdsatepoch     # Julian date
+    satrec.epoch_datetime = TLE.epoch_datetime # Python datetime
+
+    # Pass the source tle_id through the SGP4 class variable, for TLE genealogy
+    satrec.parent_tle_id = TLE.tle_id
 
     # SGP4 mode variables
     satrec.operationmode  = False
@@ -3187,6 +3208,7 @@ def iod_search(db=False):
             epoch_time = IODs[0].obs_time.strftime('%Y-%m-%d %H:%M:%S')
 
             TLE = db.selectTLEEpochBeforeDate(IODs[0].obs_time, IODs[0].ObjectNumber)
+            print("Using tle_id {} as reference:".format(TLE.tle_id))
             print("{}".format(TLE.name))
             print("{}".format(TLE.line1))
             print("{}".format(TLE.line2))
@@ -3211,6 +3233,7 @@ def iod_search(db=False):
 
     sat = initsat(TLE)
     sat.thetag = t1.thetag  # FIXME: Find a different way to get this, or how its used in anomaly()
+    sat.parent_tle_id = TLE.tle_id
 
     # Make a copy of original sat
     save_sat = copy.deepcopy(sat)
@@ -3240,11 +3263,11 @@ def iod_search(db=False):
     print("TLE Age from last OBS: {:.2f} days".format(age))    
 
     # Accept a new command
-    accept_command(sat, rd, ll, odata, sum, uu, iod_line)
+    accept_command(db, sat, rd, ll, odata, sum, uu, iod_line)
 
 # /////////////////// MAIN //////////////////////////////////////////////////////
 
-def main():
+def main(db=False):
     """ satfit
     Fit a TLE prediction to a reference TLE + new IOD observations
 
@@ -3257,7 +3280,6 @@ def main():
     global srch
     global whichconst
     global iod_line
-    global db
 
     log = logging.getLogger()
 
@@ -3284,7 +3306,7 @@ def main():
     file = "sat.txt"
     # TODO: Look into batch capability
 
-    if (False): # Make this switch on file
+    if (db): # Make this switch on file
         pass
     elif (not db):
         # Set up database connection
