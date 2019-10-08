@@ -46,6 +46,7 @@ from sgp4.model import Satellite
 from sgp4 import earth_gravity
 
 
+import iod 
 
 # The following 5 lines are necessary until our modules are public
 import inspect
@@ -57,12 +58,8 @@ sys.path.insert(1,tle_path)
 from tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetime_from_tle_fmt, assumed_decimal_point, checksum_tle_line, myjday, TruSatellite, make_tle_from_SGP4_satrec
 
 
-iod_path = os.path.join(parentdir, "trusat-iod")
+iod_path = os.path.join(parentdir, "trusat-backend")
 sys.path.insert(1,iod_path) 
-import iod
-
-db_path = os.path.join(parentdir, "sathunt-database")
-sys.path.insert(1,db_path) 
 import database
 
 from elfind import read_obs, rref, SGN, so2r
@@ -338,12 +335,8 @@ class Date(object):
             else:                   # this date is julian
                 self.jd = self.time
                 self.calcmjd()
-                (self.yy, self.mm, self.dd, self.hr, self.mn, self.ss) = invjday(self.jd)
                 self.sidereal()
-                (_, subsec) = divmod(self.ss,1)
-                subsec = int(subsec*1E6)
-                intss = int(self.ss)
-                self.time = datetime(self.yy,self.mm,self.dd,self.hr,self.mn,intss,subsec)
+                self.time = jday_to_datetime(self.jd)
         elif (self.yy):
             """ Creates a date object, t1, initialized to the calendar date and
             time passed by the six calendar variables """
@@ -475,6 +468,9 @@ def delta_t(sat,t):
     tsince = (t - sat.jdsatepoch) * 1440.0 # time since epoch in minutes
     (rr, vv) = sgp4(sat,tsince,sat.whichconst) 
 
+    sat.rr_km = rr
+    sat.vv_kmpersec = vv
+
     sat.rr = np.asarray(rr) / sat.radiusearthkm # In Earth radii
     sat.vv = np.asarray(vv) / (sat.radiusearthkm / 60.0)  # In Earth radii / min - seriously!
 
@@ -522,6 +518,17 @@ def delta_el(sat, xincl=False, xnodeo=False, eo=False, omegao=False, xmo=False, 
         sat.bstar = bsr
     sgp4init(sat.whichconst, sat.operationmode, sat.satnum, sat.jdsatepoch, sat.bstar, 0, 0, sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
     return sat
+
+
+def jday_to_datetime(jd):
+    """ Returns a python datetime corresponding to a julian day """
+    (yy, mm, dd, hr, mn, ss) = invjday(jd)
+    (_, subsec) = divmod(ss,1)
+    subsec = int(subsec*1E6)
+    intss = int(ss)
+    jday_datetime = datetime(yy,mm,dd,hr,mn,intss,subsec)    
+    return jday_datetime
+
 
 def posradang(a):
     if a < 0:
@@ -721,6 +728,59 @@ def read_obssf(IOD_Records, Stations=None):
     return odata, ll, rd, t1
 
 
+def print_satrec_coe(satrec):
+    """
+    Debug function for find the right satrec elements to access
+
+    *    satn        - satellite number
+    *    bstar       - sgp4 type drag coefficient              kg/m2er
+    *    ecco        - eccentricity
+    *    epoch       - epoch time in days from jan 0, 1950. 0 hr
+    *    argpo       - argument of perigee (output if ds)
+    *    inclo       - inclination
+    *    mo          - mean anomaly (output if ds)
+    *    no          - mean motion
+    *    nodeo       - right ascension of ascending node
+
+    """
+
+    print("""
+Epoch:             {EPOCH}
+Semi-Major Axis:   {SEMI}
+Eccentricity:      {ECC}
+Inclination:       {INC}
+RAAN (omega)       {OMEGA}
+Arg P:             {ARGP}
+True Anomaly (NU): {NU}
+Mean Anomaly (mo): {MO}
+Mean Motion  (no): {NO_KOZAI}
+""".format(          
+        EPOCH=satrec.jdsatepoch,
+        SEMI=satrec.a,
+        ECC=satrec.ecco,
+        INC=degrees(satrec.inclo),
+        OMEGA=degrees(satrec.nodeo),
+        ARGP=degrees(satrec.argpo),
+        NU="?",
+        MO=degrees(satrec.mo),
+        NO_KOZAI=satrec.no_kozai/nocon))
+
+    mean_elements="""
+    # single averaged mean elements
+    satrec.am {AM}  # Semi Major Axis
+    satrec.em {EM}  # Eccentricity
+    satrec.im {IM}  # Inclination
+    satrec.Om {Om}  # RAAN
+    satrec.mm {MM}  # Argument of Perigee
+    satrec.nm {NM}  # Mean motion""".format(
+                    AM=satrec.am,  
+                    EM=satrec.em, 
+                    IM=satrec.im, 
+                    Om=satrec.Om, 
+                    MM=satrec.mm,  
+                    NM=satrec.nm)
+    
+
 def print_el(sat, deg=False, quiet=False):
     """ print TLE to screen """
 
@@ -847,6 +907,7 @@ def find_rms(satx, rd, ll, odata):
     """
     nobs = rd.shape[0] # Using this instead of len, as it might be better for Cython
     zum = 0
+    # TODO look at using vectorized tsince code at https://github.com/brandon-rhodes/python-sgp4/pull/33
     for j in range(nobs):
         # advance satellite position
         satx = delta_t(satx,odata[j][0])
@@ -1036,7 +1097,7 @@ def print_fit(sat, rd, ll, odata, last_rms): # WORKS
     # copy sat
     satx = copy.deepcopy(sat)
 
-    fit_string = "\n      STA  YYday HHMM:SSsss   AZ     EL     ASP     XTRK    deltaT   Perr"
+    fit_string = "\n      STA  YYday HHMM:SSsss   AZ     EL     ASP     XTRK    deltaT   Perr   Delta-Epoch"
 
     print(fit_string)
 
@@ -1130,13 +1191,17 @@ def print_fit(sat, rd, ll, odata, last_rms): # WORKS
         # Format time string
         # YYday HHMM:SSsss
 
-        tsince = (odata[j][0] - satx.jdsatepoch) * 1440.0 # time since epoch in minutes # TODO: Clean up this calculation
-        obstime = satx.epoch_datetime + timedelta(minutes=tsince)
+        tsince_days = (odata[j][0] - satx.jdsatepoch) # time since epoch in days 
+        tsince_minutes = tsince_days * 1440.0
+
+        # Reconstruct the DateTime of the observations from the data we have here
+        # TODO: Clean up this calculation
+        obstime = satx.epoch_datetime + timedelta(minutes=tsince_minutes)
         timestring = obstime.strftime('%y%j %H%M:%S')
         SSS = obstime.strftime('%f')
         SSS = int(1000*(int(SSS)/1E6))
-        fit_string = "({:2d}) {:04d}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}".format(
-            j + 1, int(odata[j][3]), timestring, SSS, az, el, asp, xtrk, delt, Perr)
+        fit_string = "({:2d}) {:04d}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}  {:7.5f}".format(
+            j + 1, int(odata[j][3]), timestring, SSS, az, el, asp, xtrk, delt, Perr, tsince_days)
         print(fit_string)
 
         # print fit to file
@@ -1425,7 +1490,7 @@ def anomaly_search(sat, rd, ll, odata, sum):
         # nsum loop - until rms doesn't decrease since last loop
         while(True):
             min = mk - step
-            sat = delta_el(sat, ma=min)
+            sat = ta_tta_el(sat, ma=min)
             # sat.delta_el(sat.jd, ii, om, ec, ww, min, nn, bstar) # FIXME python-SGP4
             nsum = find_rms(sat, rd, ll, odata)
             if (nsum < sum):
@@ -1646,13 +1711,12 @@ def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
 def align(sat, rd, ll, odata):
     """ sets deltaT error at last obs epoch to zero """
     nobs = len(odata)
-    last = nobs - 1 # FIXME global
     satx = sat        # copy sat
 
     delt = 1    # Give delt a starting value for the loop
     while(fabs(delt) > 1.0e-5): # FIXME global
         # advance satellite position
-        delta_t(satx,odata[last][0])
+        delta_t(satx,odata[-1][0])
         nrr = mag(satx.rr)
         nvv = mag(satx.vv)
 
@@ -2708,7 +2772,7 @@ def maneuver(sat, rd, ll, odata, sum):
             out = 0
             sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)
-            print("\nperiod = %f days".format(nocon/sat.xno))
+            print("\nperiod = {:f} days".format(nocon/sat.nm))
         except:
             buf = buf.upper()
 
@@ -2723,51 +2787,54 @@ def maneuver(sat, rd, ll, odata, sum):
                     continue # Back to top of While loop
                 if (buf == 'P'):
                     # if previously at perigee, back up one revolution
-                    if (ma < 0.1):
-                        time = satm.jd - nocon/satm.xno*(1 + satm.xmo/twopi)
+                    if (sat.mm < 0.1):
+                        time = sat.jdsatepoch - nocon/sat.nm*(1 + sat.mm/twopi)
                     # if not previously at perigee, back up to perigee
                     else:
-                        time = satm.jd - satm.xmo*nocon/(satm.xno*twopi)
+                        time = sat.jdsatepoch - sat.mm*nocon/(sat.mm*twopi)
                 # NEXT: advance one revolution
                 if (buf == 'N'):
                     # if previously at perigee, go forward one revolution
-                    if (ma > 359.9):
-                        time = satm.jd + nocon/satm.xno*(2 - satm.xmo/twopi)
+                    if (sat.mm > 359.9):
+                        time = sat.jdsatepoch + nocon/sat.nm*(2 - sat.mm/twopi)
                     # if not previously at perigee, go forward to perigee
                     else:
-                        time = satm.jd + nocon/satm.xno*(1 - satm.xmo/twopi)
+                        time = sat.jdsatepoch + nocon/sat.nm*(1 - sat.mm/twopi)
                 # move to time and ma at perigee
                 t2 = Date(time=time)
-                delta_t(satm,t2.jd) # FIXME: - this needs a delta time
+                sat = delta_t(sat,t2.jd)
+                # delta_t(satm,t2.jd) # FIXME: - this needs a delta time
                 # satm.delta_t(t2.jd) # FIXME: Replace with python-SGP4 call
                 # satm.rv2el(satm.rr, satm.vv) # FIXME: Replace with python-SGP4 call
-                satm.jd = t2.jd
-                ma = fmod(degrees(satm.xmo), 360)
+                sat.jdsatepoch = t2.jd
+                ma = fmod(degrees(sat.mm), 360)
                 # refine perigee
                 for i in range(0, 3):
                     # go forward
                     if (ma > 359.9):
-                        time = nocon/satm.xno*(satm.xmo/twopi - 1)
+                        time = nocon/sat.nm*(sat.mm/twopi - 1)
                     # back up
                     else:
-                        time = satm.xmo*nocon/(satm.xno*twopi)
-                    t1 = Date(time=(satm.jd - time))
-                    delta_t(satm,t2.jd) # FIXME: - this needs a delta time
+                        time = sat.mm*nocon/(sat.nm*twopi)
+                    t1 = Date(time=(sat.jdsatepoch - time))
+                    sat = delta_t(sat,t2.jd)
+                    # delta_t(satm,t2.jd) # FIXME: - this needs a delta time
                     # satm.delta_t(t1.jd) # FIXME: Replace with python-SGP4 call 
-                    satm.jd = t1.jd
+                    sat.jdsatepoch = t2.jd
                     # satm.rv2el(satm.rr, satm.vv)
-                    ma = fmod(degrees(satm.xmo), 360)
+                    ma = fmod(degrees(sat.mm), 360)
                 print("\nPERIGEE")
-                satm.print_el()       # print new elements
+                # TODO: Need to update the elements in Sat to print them...
+                print_el(sat)       # print new elements
 
                 # perigee residual
-                time = sat.jd                     # save sat epoch
-                delta_t(satm,t2.jd) # FIXME: - this needs a delta time
+                time = save_sat.jdsatepoch                     # save sat epoch
+                save_sat = delta_t(save_sat,t2.jd) # FIXME: - this needs a delta time
                 # sat.delta_t(satm.jd)              # move sat to perigee FIXME python-SGP4
-                delr = sat.rr - satm.rr           # compare sat and satm perigees
-                delta_t(satm,t2.jd) # FIXME: - this needs a delta time
+                delr = sat.rr - save_sat.rr           # compare sat and satm perigees
+                # sat = delta_t(sat,t2.jd) # FIXME: - this needs a delta time
                 # sat.delta_t(time)                 # restore sat epoch  FIXME python-SGP4
-                print("\nperigee delta {:5.0f}".format(mag(delr)*6378.135))
+                print("\nperigee delta {:5.0f}".format(mag(delr)*sat.radiusearthkm))
 
             # Apogee
             elif (buf == 'A'):
@@ -2782,42 +2849,42 @@ def maneuver(sat, rd, ll, odata, sum):
                 elif (buf == 'P'):
                     # if previously at or past apogee and past next perigee, back up to apogee
                     if (ma < 180.1):
-                        time = satm.jd - 0.5*nocon/satm.xno*(1 + satm.xmo/pi)
+                        time = sat.jdsatepoch - 0.5*nocon/sat.nm*(1 + sat.mm/pi)
                     # if previously past apogee and before next perigee, back up to apogee
                     else:
-                        time = satm.jd + 0.5*nocon/satm.xno*(1 - satm.xmo/pi)
+                        time = sat.jdsatepoch + 0.5*nocon/sat.nm*(1 - sat.mm/pi)
                 # NEXT: advance to apogee
                 elif (buf == 'N'):
                     # if previously at or past apogee and before perigee, go forward to apogee
                     if (ma > 179.9):
-                        time = satm.jd + 0.5*nocon/satm.xno*(3 - satm.xmo/pi)
+                        time = sat.jdsatepoch + 0.5*nocon/sat.nm*(3 - sat.mm/pi)
                     # if previously past apogee and past next perigee, go forward to apogee
                     else:
-                        time = satm.jd + 0.5*nocon/satm.xno*(1 - satm.xmo/pi)
+                        time = sat.jdsatepoch + 0.5*nocon/sat.nm*(1 - sat.mm/pi)
 
                 # move time and satm.xmo to apogee
                 t2 = Date(time=time)
-                delta_t(satm,t2.jd) # FIXME: - this needs a delta time
+                delta_t(sat,t2.jd) # FIXME: - this needs a delta time
                 # satm.delta_t(t2.jd) # FIXME python-SGP4
-                satm.jd = t2.jd
+                sat.jdsatepoch = t2.jd
                 # satm.rv2el(satm.rr, satm.vv) # FIXME python-SGP4
                 for i in range(0, 3):
                     # loop to refine apogee, find when satm.xmo = pi
-                    t1 = Date(time=(satm.jd + 0.5*nocon/satm.xno*(1 - satm.xmo/pi)))
-                    delta_t(satm,t2.jd) # FIXME: - this needs a delta time
+                    t1 = Date(time=(sat.jdsatepoch + 0.5*nocon/sat.nm*(1 - sat.mm/pi)))
+                    sat = delta_t(sat,t2.jd) # FIXME: - this needs a delta time
                     # satm.delta_t(t1.jd) # FIXME python-SGP4
-                    satm.jd = t1.jd
+                    sat.jdsatepoch = t1.jd
                     # satm.rv2el(satm.rr, satm.vv) # FIXME python-SGP4
-                ma = fmod(degrees(satm.xmo), 360)
+                ma = fmod(degrees(sat.mm), 360)
                 print("\nAPOGEE")
-                satm.print_el()       # print new elements
+                print_el(sat)       # print new elements
 
                 # apogee residual
-                time = sat.jd                     # save sat epoch
-                delta_t(satm,t2.jd) # FIXME: - this needs a delta time
+                time = save_sat.jd                     # save sat epoch
+                save_sat = delta_t(save_sat,t2.jd) # FIXME: - this needs a delta time
                 # sat.delta_t(satm.jd)              # move sat to apogee # FIXME python-SGP4
-                delr = sat.rr - satm.rr           # compare sat and satm apogees
-                delta_t(sat,t2.jd) # FIXME: - this needs a delta time
+                delr = sat.rr - save_sat.rr           # compare sat and satm apogees
+                # delta_t(sat,t2.jd) # FIXME: - this needs a delta time
                 # sat.delta_t(time)                 # restore sat epoch # FIXME python-SGP4
                 print("\napogee delta {:5.0f}".format(mag(delr)*6378.135))  # kilometers
 
@@ -2834,14 +2901,14 @@ def maneuver(sat, rd, ll, odata, sum):
                 nobs+=1 # FIXME Global
 
                 # ll is unit vector in same direction as satm.rr
-                ll[0] = satm.rr/mag(satm.rr)
+                ll[0] = sat.rr/mag(sat.rr)
                 
                 # rd is unit vector (1 er) in same direction as satm.rr
-                rd[0] = satm.rr/mag(satm.rr)
+                rd[0] = sat.rr/mag(sat.rr)
                 # odata holds epoch, ra, dc, obscode data
 
-                odata[0][0] = satm.jd
-                (ra, dc) = zrll(satm, rd[0]) # Get predicted position
+                odata[0][0] = sat.jd
+                (ra, dc) = zrll(sat, rd[0]) # Get predicted position
                 odata[0][1] = radians(ra)
                 odata[0][2] = radians(dc)
                 odata[0][3] = 0000
@@ -2855,7 +2922,7 @@ def maneuver(sat, rd, ll, odata, sum):
                 yy    = int(iod_line[1] + 6)
                 desig = "{:4s}".format(iod_line[1] + 9)
                 desig[4] = '\0'
-                t1 = Date(time=(satm.jd))
+                t1 = Date(time=(sat.jd))
                 ra /= 15
                 rm = fmod(ra, rm)*60000
                 dm = fabs(fmod(dc, dm)*6000)
@@ -2871,16 +2938,16 @@ def maneuver(sat, rd, ll, odata, sum):
                 try:
                     dE = float(buf)
                     dE /= 11300.168   # er^2 / min^2
-                    vec = np.cross(satm.rr, satm.vv)
+                    vec = np.cross(sat.rr, sat.vv)
                     mu = mag(vec)
                     mu = mu*mu
-                    mu = mu / satm.aodp
-                    mu = mu / (1 - satm.eo*satm.eo)
-                    E2 = -0.5*mu / satm.aodp
+                    mu = mu / sat.aodp
+                    mu = mu / (1 - sat.eo*sat.eo)
+                    E2 = -0.5*mu / sat.aodp
                     VV = sqrt(2*(E2 + dE + mu/mag(satm.rr)))  # new velocity magnitude
-                    dV = unit_vector(satm.vv)   # velocity direction
+                    dV = unit_vector(sat.vv)   # velocity direction
                     dev = VV * dV               # new velocity vector
-                    sat = satm
+                    # sat = satm
                     sat.rv2el(sat.rr, vec)      # State vectors to mean elements #FIXME: python-SGP4
                     print_el(sat)              # print new elements
                 except:
@@ -2924,6 +2991,23 @@ def write_el(db, sat, rd, ll, odata, sum, start_rms):
     """
     save_sat = copy.deepcopy(sat)
     while(True): # Forever loop
+        # When making a TLE, make sure to use the most recent obs_time available for setting epoch
+        epoch_jd = odata[-1][0]
+        print_satrec_coe(sat)
+
+        # tau = t.epoch - Mean Anomaly/Mean motion - Time of perigee crossing
+        tau = sat.jdsatepoch - (sat.mo/sat.no_kozai)
+        new_ma = sat.no_kozai*(epoch_jd-tau) # Solve for new Mean Anomaly at last observation time
+        sat = delta_t(sat,epoch_jd)
+
+        sat2 = re_initsat(sat, new_ma, epoch_jd)
+        sat2 = delta_t(sat2,epoch_jd)
+        print("After reinit")
+        print_satrec_coe(sat2)
+
+        print("sat1.rr {} sat1.vv {}".format(sat.rr,sat.vv))
+        print("sat2.rr {} sat2.vv {}".format(sat2.rr,sat2.vv))
+
         newTLE = make_tle_from_SGP4_satrec(sat,classification="T")
         # tle = sat.epoch
         # ii = degrees(sat.inclo)
@@ -3103,6 +3187,7 @@ def initsat(TLE,gravconst="wgs72"):
 
     # Derived quantities
     satrec.jdsatepoch     = TLE.jdsatepoch     # Julian date
+    satrec.jdSGP4epoch    = satrec.jdsatepoch - 2433281.5
     satrec.epoch_datetime = TLE.epoch_datetime # Python datetime
 
     # Pass the source tle_id through the SGP4 class variable, for TLE genealogy
@@ -3158,6 +3243,48 @@ def initsat(TLE,gravconst="wgs72"):
     else:
         return satrec
 
+def re_initsat(satrecnew, new_ma, new_raan, new_jdepoch):
+    satrec = copy.deepcopy(satrecnew)
+
+    rtn_code = sgp4init(satrec.whichconst, satrec.operationmode, satrec.satnum, 
+             new_jdepoch-2433281.5, # epoch time in days from jan 0, 1950. 0 hr
+             satrec.bstar, satrec.ndot, satrec.nddot, satrec.ecco, satrec.argpo, 
+             satrec.inclo, new_ma, satrec.no_kozai, new_raan, satrec)
+    if (rtn_code is not True):
+        if (satrec.error == 1):
+            log.error("sgp4init error {}".format(satrec.error))
+            log.error("mean elements, ecc >= 1.0 or ecc < -0.001 or a < 0.95 er")
+            return False
+        elif (satrec.error == 2):
+            log.error("sgp4init error {}".format(satrec.error))
+            log.error("mean motion less than 0.0")
+            return False
+        elif (satrec.error == 3):
+            log.error("sgp4init error {}".format(satrec.error))
+            log.error("pert elements, ecc < 0.0  or  ecc > 1.0")
+            return False
+        elif (satrec.error == 4):
+            log.error("sgp4init error {}".format(satrec.error))
+            log.error("semi-latus rectum < 0.0")
+            return False
+        elif (satrec.error == 5):
+            log.error("sgp4init error {}".format(satrec.error))
+            log.error("epoch elements are sub-orbital")
+            return False
+        elif (satrec.error == 6):
+            log.error("sgp4init error {}".format(satrec.error))
+            log.error("satellite has decayed")
+            return False
+        else:
+            log.error("sgp4init error {}".format(satrec.error))
+            log.error("Unknown error code")
+            return False
+    else:
+        satrec.jdsatepoch = new_jdepoch # FIXME: A little astonished that satrec doesn't have a mechanism for storing its own Epoch
+        satrec.jdSGP4epoch = satrec.jdsatepoch - 2433281.5
+        satrec.epoch_datetime = jday_to_datetime(satrec.jdsatepoch)
+        return satrec
+
 
 def iod_search(db=False):
     global iod_line #FIXME: get rid of this global
@@ -3205,8 +3332,6 @@ def iod_search(db=False):
                 satnum = i.ObjectNumber
 
         try:
-            epoch_time = IODs[0].obs_time.strftime('%Y-%m-%d %H:%M:%S')
-
             TLE = db.selectTLEEpochBeforeDate(IODs[0].obs_time, IODs[0].ObjectNumber)
             print("Using tle_id {} as reference:".format(TLE.tle_id))
             print("{}".format(TLE.name))
@@ -3264,6 +3389,88 @@ def iod_search(db=False):
 
     # Accept a new command
     accept_command(db, sat, rd, ll, odata, sum, uu, iod_line)
+
+def object_search(db=False):
+    global iod_line #FIXME: get rid of this global
+
+    while(True):
+        try:
+            object_inp = input("\nEnter norad number of object: ")
+            object = int(object_inp.strip())
+        except:
+            pass
+
+        IOD_candidates = db.findObservationCluster(object)
+        if (len(IOD_candidates)==0):
+            print("No observations found for norad_number {}".format(object))
+            continue
+
+        IODs = db.selectIODlist(IOD_candidates)
+
+        iod_line = []
+        for i in IODs:
+            iod_line.append(i.iod_string)
+
+        try:
+            TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object)    # FIXME: Probably want to call elfind in a rebuild case
+            print("Using tle_id {} as reference:".format(TLE.tle_id))
+            print("{}".format(TLE.name))
+            print("{}".format(TLE.line1))
+            print("{}".format(TLE.line2))
+        except:
+            log.warning("NO TLE found for object '{}' with EPOCH before {}".format(object,IODs[0].obs_time))
+            continue
+
+        Stations = db.getStationDictforIODs(IODs)
+        if (not len(Stations)):
+            log.warning("NO Station data found for observations.")
+            continue
+        break
+
+    # TODO: Turn this, and the function from iod_search into a separate function
+
+    # // read all observations from input
+    # // Observed topocentric vectors for each observer position.
+    # // Equatorial coordinates.
+    # TODO: Audit this against everything done in read_obs starting on line 1585
+    # get line-of-sight vectors
+    # (odata, ll, rd) = read_obs(IOD_Records)
+    (odata, ll, rd, t1) = read_obssf(IODs, Stations) # Use the scott-campbell way while debugging against satfit.cpp
+
+    sat = initsat(TLE)
+    sat.thetag = t1.thetag  # FIXME: Find a different way to get this, or how its used in anomaly()
+    sat.parent_tle_id = TLE.tle_id
+
+    # Make a copy of original sat
+    save_sat = copy.deepcopy(sat)
+
+    # // maneuvering sat
+    satm = copy.deepcopy(sat)
+
+    # // calculate uu, degrees, for search
+    uu = longitude(sat)
+
+    # DB results already sorted, make sure the file ones are
+    if(not db):
+        [iod_line, odata, ll, rd] = sort(iod_line, odata, ll, rd)
+
+    nobs = len(IODs)
+    sum = find_rms(sat, rd, ll, odata) # Establish baseline rms for global
+    print("\n{} Observations Found".format(nobs))
+    print("\nStarting rms{:12.5f}".format(sum))
+
+    # print dates
+    # t2 = Date()
+    # print("\TLE   : {:d}".format(t2.doy))
+    # if(nobs > 0):
+    #     t3 = Date(time=(odata[nobs - 1][0]))
+    #     print("LAST OB : {:d}".format(t3.doy))
+    age = odata[nobs - 1][0] - sat.jdsatepoch
+    print("TLE Age from last OBS: {:.2f} days".format(age))    
+
+    # Accept a new command
+    accept_command(db, sat, rd, ll, odata, sum, uu, iod_line)
+
 
 # /////////////////// MAIN //////////////////////////////////////////////////////
 
@@ -3329,7 +3536,7 @@ def main(db=False):
     # iod_obs_id = input("IOD db ID: ")
     while(True):
         print("\nEnter command")
-        print("Database: (I)OD search  (L)atest  q(U)eue")
+        print("Database: (I)OD search (O)bject search (L)atest  q(U)eue")
         print("(Q)uit")
 
         cmd = input(": ").strip()
@@ -3337,6 +3544,8 @@ def main(db=False):
 
         if (cmd == "I"):    # IOD Search
             iod_search(db)
+        elif (cmd == "O"):  # Object search
+            object_search(db)
         elif (cmd == "L"):  # Latest observations
             pass
         elif (cmd == "U"):  # View the queue
