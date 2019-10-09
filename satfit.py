@@ -48,15 +48,7 @@ from sgp4 import earth_gravity
 
 import iod 
 
-# The following 5 lines are necessary until our modules are public
-import inspect
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-tle_path = os.path.join(parentdir, "trusat-tle")
-sys.path.insert(1,tle_path) 
-# FIXME: At some point, just evaluate importing the whole thing, or refactor calling functions to largely be in TLE_util
 from tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetime_from_tle_fmt, assumed_decimal_point, checksum_tle_line, myjday, TruSatellite, make_tle_from_SGP4_satrec
-
 
 iod_path = os.path.join(parentdir, "trusat-backend")
 sys.path.insert(1,iod_path) 
@@ -403,6 +395,7 @@ class Date(object):
 
     def calcmjd(self):
         self.mjd = self.jd - 2400000.5
+
 
 class Locate(object):
     """ An incomplete implementation of the Locate class by scott campbell

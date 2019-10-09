@@ -16,14 +16,7 @@ from math import asin, sin, cos, atan2
 import logging
 log = logging.getLogger(__name__)
 
-# The following 5 lines are necessary until our modules are public
-import inspect
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-database_path = os.path.join(parentdir, "trusat-tle")
-sys.path.insert(1,database_path) 
 from tle_util import launch_piece_letter_to_number, assumed_decimal_point
-
 
 # REGEXP for valid angle string format with content
 # Note that the columns containing the angle format are evaluated for validity with these REGEX
