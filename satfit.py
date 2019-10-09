@@ -50,8 +50,12 @@ import iod
 
 from tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetime_from_tle_fmt, assumed_decimal_point, checksum_tle_line, myjday, TruSatellite, make_tle_from_SGP4_satrec
 
-iod_path = os.path.join(parentdir, "trusat-backend")
-sys.path.insert(1,iod_path) 
+# The following 5 lines are necessary until our modules are public
+import inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+backend_path = os.path.join(parentdir, "trusat-backend")
+sys.path.insert(1,backend_path) 
 import database
 
 from elfind import read_obs, rref, SGN, so2r
