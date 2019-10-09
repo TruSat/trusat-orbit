@@ -14,7 +14,7 @@ import argparse                     # command line parsing
 import os
 from datetime import date, timedelta, datetime
 from time import time                         # For performance timing
-from math import (fabs, radians, sin, cos, pi, sqrt, fmod, acos, asin, atan, tan, degrees)    # Fast/precise math functions                      
+from math import (fabs, radians, sin, cos, pi, sqrt, fmod, acos, asin, atan, tan, degrees, modf)    # Fast/precise math functions                      
 import numpy as np
 import logging
 import string
@@ -476,47 +476,80 @@ def delta_t(sat,t):
 
     return sat
 
-def delta_el(sat, xincl=False, xnodeo=False, eo=False, omegao=False, xmo=False, xno=False,   bsr=False,
-                    ii=False,      om=False, ec=False,     ww=False,  ma=False,  nn=False, bstar=False):
+def delta_el(sat, xincl=False, xnodeo=False,   eo=False, omegao=False, xmo=False,      xno=False,   bsr=False, 
+                  inclo=False,  nodeo=False, ecco=False,  argpo=False,  mo=False, no_kozai=False,
+                     ii=False,     om=False,   ec=False,     ww=False,  ma=False,       nn=False, bstar=False,  
+            jdsatepoch=False, jdSGP4epoch=False, epoch_datetime=False):
     """ delta_el - Reinitialize SGP4 satellite object with changed Keplerian elements
     
     Units can be passed in via radians or degrees, as is the convention for variable names
     """
     if (xincl):
         sat.inclo = xincl
+    elif (inclo):
+        sat.inclo = inclo
     elif (ii):
         sat.inclo = de2ra*ii
 
     if (xnodeo):
         sat.nodeo = posradang(xnodeo)
+    elif (nodeo):
+        sat.nodeo = posradang(nodeo)
     elif (om):
         sat.nodeo = posradang(de2ra*om)
 
     if (eo):
         sat.ecco = eo   
+    elif (ecco):
+        sat.ecco = ecco   
     elif (ec):
         sat.ecco = ec   
 
     if (omegao):
         sat.argpo = posradang(omegao)
+    elif (argpo):
+        sat.argpo = posradang(argpo)
     elif (ww):
         sat.argpo = posradang(de2ra*ww)
 
     if (xmo):
         sat.mo = posradang(xmo)
+    elif (mo):
+        sat.mo = posradang(mo)
     elif (ma):
         sat.mo = posradang(de2ra*ma)
 
     if (xno):
         sat.no_kozai = xno
+    elif (no_kozai):
+        sat.no_kozai = no_kozai
     elif (nn):
         sat.no_kozai = nn * nocon
 
     if (bsr):
         sat.bstar = bsr
     elif (bstar):
-        sat.bstar = bsr
-    sgp4init(sat.whichconst, sat.operationmode, sat.satnum, sat.jdsatepoch, sat.bstar, 0, 0, sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
+        sat.bstar = bstar
+
+    if (jdsatepoch):
+        sat.jdsatepoch = jdsatepoch
+        sat.jdSGP4epoch = sat.jdsatepoch - 2433281.5
+        sat.epoch_datetime = jday_to_datetime(sat.jdsatepoch)
+    elif (jdSGP4epoch):
+        sat.jdSGP4epoch = jdSGP4epoch
+        sat.jdsatepoch = sat.jdSGP4epoch + 2433281.5
+        sat.epoch_datetime = jday_to_datetime(sat.jdsatepoch)
+    elif (epoch_datetime):
+        sat.epoch_datetime = epoch_datetime
+
+        (year, month, day, hour, minute, second) = sat.epoch_datetime.timetuple()[:6]
+        microseconds = int(sat.epoch_datetime.strftime('%f'))
+        sec_with_microseconds = second + microseconds/1.0E6
+
+        sat.jdsatepoch = myjday(year, month, day, hour, minute, sec_with_microseconds)
+        sat.jdSGP4epoch = sat.jdsatepoch - 2433281.5
+       
+    sgp4init(sat.whichconst, sat.operationmode, sat.satnum, sat.jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot, sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
     return sat
 
 
@@ -1490,7 +1523,7 @@ def anomaly_search(sat, rd, ll, odata, sum):
         # nsum loop - until rms doesn't decrease since last loop
         while(True):
             min = mk - step
-            sat = ta_tta_el(sat, ma=min)
+            sat = delta_el(sat, ma=min)
             # sat.delta_el(sat.jd, ii, om, ec, ww, min, nn, bstar) # FIXME python-SGP4
             nsum = find_rms(sat, rd, ll, odata)
             if (nsum < sum):
@@ -1773,6 +1806,7 @@ def edit_history():
     pass
     # accept_command()
 
+
 def viewobs(iod_line):
     # FIXME Make the global variables local
     nobs = len(iod_line)
@@ -1782,18 +1816,18 @@ def viewobs(iod_line):
     print()
     # accept_command()
 
+
 def remove(rd, ll, odata, iod_line):
     buf = input("\nRemove Line Number : ")
     j = int(buf.strip())
 
-    #TODO: Make this more pythonic
-    for i in range(j):
-        rd[i - 1] = rd[i]
-        ll[i - 1] = ll[i]
-        odata[i - 1] = odata[i]
-        iod_line[i - 1] = iod_line[i]
-    
-    return rd, ll, odata, iod_line
+    rd_del    = np.delete(rd,j-1,0)
+    ll_del    = np.delete(ll,j-1,0)    
+    odata_del = np.delete(odata,j-1,0)
+    iod_line.pop(j-1) 
+
+    return rd_del, ll_del, odata_del, iod_line
+
 
 def fit(sat, rd, ll, odata, sum):
     out = 0
@@ -1944,7 +1978,7 @@ def accept_command(db, sat, rd, ll, odata, sum, uu, iod_line):
         elif (cmd == "O"):  # Discover
             discover(sat, rd, ll, odata)
         elif (cmd == "U"):  # Maneuver
-            sat = maneuver(sat, rd, ll, odata, sum)
+            sat = maneuver(sat, rd, ll, odata, sum, iod_line)
 
         # Visible functions
         elif (cmd == "S"):  # Step
@@ -1987,7 +2021,13 @@ def accept_command(db, sat, rd, ll, odata, sum, uu, iod_line):
             write_el(db, sat, rd, ll, odata, sum, start_rms)
         elif (cmd == "Q"):  # Quit
             main(db)
-    
+        elif (cmd == "."):
+            sat = move_epoch_to_previous_perigee(sat)
+            print_el(sat)
+        elif (cmd == ","):
+            sat = move_epoch_to_jd(sat,odata[-1][0])
+            print_el(sat)
+
 def discover(sat, rd, ll, odata):       # partition search
     global srch   # FIXME global variable
     global uu
@@ -2742,7 +2782,37 @@ def bstar_func(sat, rd, ll, odata, sum):
                 return sat
 
 
-def maneuver(sat, rd, ll, odata, sum):
+def move_epoch_to_previous_perigee(sat):
+    # if previously at perigee, back up one revolution
+    if (sat.mo < radians(0.1)):  # Use SGP4 elements
+        t2_jd = sat.jdsatepoch - nocon/sat.no_kozai*(1 + sat.mo/twopi) # Use SGP4 elements
+    # if not previously at perigee, back up to perigee
+    else:
+        t2_jd = sat.jdsatepoch - sat.mo*nocon/(sat.no_kozai*twopi) # Use SGP4 elements
+    sat = delta_t(sat,t2_jd)
+    sat.mm = posradang(sat.mm) # Use instantaneous mean element FIXME: cython SGP4 allows these to be negative sign
+    # refine perigee
+    for i in range(0, 30):
+        # go forward
+        if (sat.mm > radians(359.9)):
+            t1_delta = nocon/sat.no_kozai*(sat.mm/twopi - 1) # Use instantaneous mean elements except for no_kozai
+        # back up
+        else:
+            t1_delta = sat.mm*nocon/(sat.no_kozai*twopi) # Use instantaneous mean elements except for no_kozai
+        t1_jd = t2_jd - t1_delta
+        sat = delta_t(sat,t1_jd)
+        sat.mm = posradang(sat.mm) # Use instantaneous mean element FIXME: cython SGP4 allows these to be negative sign
+    sat = delta_el(sat,inclo=sat.im, nodeo=sat.Om, ecco=sat.em, argpo=sat.om, mo=sat.mm, no_kozai=sat.no_kozai, jdsatepoch=t1_jd)
+    return(sat)
+
+
+def move_epoch_to_jd(sat,t2_jd):
+    sat = delta_t(sat,t2_jd)
+    sat = delta_el(sat,inclo=sat.im, nodeo=sat.Om, ecco=sat.em, argpo=sat.om, mo=sat.mm, no_kozai=sat.no_kozai, jdsatepoch=t2_jd)
+    return(sat)
+
+
+def maneuver(sat, rd, ll, odata, sum, iod_line):
     # Make a copy of original sat
     save_sat = copy.deepcopy(sat)
     nobs = len(odata)
@@ -2757,9 +2827,9 @@ def maneuver(sat, rd, ll, odata, sum):
  
             # store old obs
             iod_linex = copy.copy(iod_line)
-            llx   = copy.copy(ll)
-            rdx   = copy.copy(rd)
-            odatax = copy.copy(odata)
+            llx       = copy.copy(ll)
+            rdx       = copy.copy(rd)
+            odatax    = copy.copy(odata)
 
             for i in range(p, nobs):
                 iod_line[i-p] = iod_line[i-1]
@@ -2772,7 +2842,7 @@ def maneuver(sat, rd, ll, odata, sum):
             out = 0
             sum = print_fit(sat, rd, ll, odata, sum)
             print_el(sat)
-            print("\nperiod = {:f} days".format(nocon/sat.nm))
+            print("\nperiod = {:f} days".format(nocon/sat.no_kozai))
         except:
             buf = buf.upper()
 
@@ -2787,53 +2857,43 @@ def maneuver(sat, rd, ll, odata, sum):
                     continue # Back to top of While loop
                 if (buf == 'P'):
                     # if previously at perigee, back up one revolution
-                    if (sat.mm < 0.1):
-                        time = sat.jdsatepoch - nocon/sat.nm*(1 + sat.mm/twopi)
+                    if (sat.mo < radians(0.1)):  # Use SGP4 elements
+                        t2_jd = sat.jdsatepoch - nocon/sat.no_kozai*(1 + sat.mo/twopi) # Use SGP4 elements
                     # if not previously at perigee, back up to perigee
                     else:
-                        time = sat.jdsatepoch - sat.mm*nocon/(sat.mm*twopi)
+                        t2_jd = sat.jdsatepoch - sat.mo*nocon/(sat.no_kozai*twopi) # Use SGP4 elements
                 # NEXT: advance one revolution
                 if (buf == 'N'):
                     # if previously at perigee, go forward one revolution
-                    if (sat.mm > 359.9):
-                        time = sat.jdsatepoch + nocon/sat.nm*(2 - sat.mm/twopi)
+                    if (sat.mo > radians(359.9)):  # Use SGP4 elements
+                        t2_jd = sat.jdsatepoch + nocon/sat.no_kozai*(2 - sat.mo/twopi) # Use SGP4 elements
                     # if not previously at perigee, go forward to perigee
                     else:
-                        time = sat.jdsatepoch + nocon/sat.nm*(1 - sat.mm/twopi)
+                        t2_jd = sat.jdsatepoch + nocon/sat.no_kozai*(1 - sat.mo/twopi) # Use SGP4 elements
+                # t2 = Date(time=time)
                 # move to time and ma at perigee
-                t2 = Date(time=time)
-                sat = delta_t(sat,t2.jd)
-                # delta_t(satm,t2.jd) # FIXME: - this needs a delta time
-                # satm.delta_t(t2.jd) # FIXME: Replace with python-SGP4 call
-                # satm.rv2el(satm.rr, satm.vv) # FIXME: Replace with python-SGP4 call
-                sat.jdsatepoch = t2.jd
-                ma = fmod(degrees(sat.mm), 360)
+                sat = delta_t(sat,t2_jd)
+                sat.mm = posradang(sat.mm) # Use instantaneous mean element FIXME: cython SGP4 allows these to be negative sign
                 # refine perigee
-                for i in range(0, 3):
+                for i in range(0, 30):
                     # go forward
-                    if (ma > 359.9):
-                        time = nocon/sat.nm*(sat.mm/twopi - 1)
+                    if (sat.mm > radians(359.9)):
+                        t1_delta = nocon/sat.no_kozai*(sat.mm/twopi - 1) # Use instantaneous mean elements except for no_kozai
                     # back up
                     else:
-                        time = sat.mm*nocon/(sat.nm*twopi)
-                    t1 = Date(time=(sat.jdsatepoch - time))
-                    sat = delta_t(sat,t2.jd)
-                    # delta_t(satm,t2.jd) # FIXME: - this needs a delta time
-                    # satm.delta_t(t1.jd) # FIXME: Replace with python-SGP4 call 
-                    sat.jdsatepoch = t2.jd
-                    # satm.rv2el(satm.rr, satm.vv)
-                    ma = fmod(degrees(sat.mm), 360)
+                        t1_delta = sat.mm*nocon/(sat.no_kozai*twopi) # Use instantaneous mean elements except for no_kozai
+                    t1_jd = t2_jd - t1_delta
+                    sat = delta_t(sat,t1_jd)
+                    sat.mm = posradang(sat.mm) # Use instantaneous mean element FIXME: cython SGP4 allows these to be negative sign
                 print("\nPERIGEE")
-                # TODO: Need to update the elements in Sat to print them...
+                # Reinitialize satrec from current instantaneous mean elements and time (except mean motion)
+                sat = delta_el(sat,inclo=sat.im, nodeo=sat.Om, ecco=sat.em, argpo=sat.om, mo=sat.mm, no_kozai=sat.no_kozai, jdsatepoch=t1_jd)
                 print_el(sat)       # print new elements
 
                 # perigee residual
-                time = save_sat.jdsatepoch                     # save sat epoch
-                save_sat = delta_t(save_sat,t2.jd) # FIXME: - this needs a delta time
-                # sat.delta_t(satm.jd)              # move sat to perigee FIXME python-SGP4
+                sat = delta_t(sat,sat.jdsatepoch)
+                save_sat = delta_t(save_sat,sat.jdsatepoch)
                 delr = sat.rr - save_sat.rr           # compare sat and satm perigees
-                # sat = delta_t(sat,t2.jd) # FIXME: - this needs a delta time
-                # sat.delta_t(time)                 # restore sat epoch  FIXME python-SGP4
                 print("\nperigee delta {:5.0f}".format(mag(delr)*sat.radiusearthkm))
 
             # Apogee
@@ -2848,107 +2908,108 @@ def maneuver(sat, rd, ll, odata, sum):
                 # Previous
                 elif (buf == 'P'):
                     # if previously at or past apogee and past next perigee, back up to apogee
-                    if (ma < 180.1):
-                        time = sat.jdsatepoch - 0.5*nocon/sat.nm*(1 + sat.mm/pi)
+                    if (sat.mo < radians(180.1)):
+                        t2_jd = sat.jdsatepoch - 0.5*nocon/sat.no_kozai*(1 + sat.mo/pi) # Use SGP4 elements
                     # if previously past apogee and before next perigee, back up to apogee
                     else:
-                        time = sat.jdsatepoch + 0.5*nocon/sat.nm*(1 - sat.mm/pi)
+                        t2_jd = sat.jdsatepoch + 0.5*nocon/sat.no_kozai*(1 - sat.mo/pi) # Use SGP4 elements
                 # NEXT: advance to apogee
                 elif (buf == 'N'):
                     # if previously at or past apogee and before perigee, go forward to apogee
-                    if (ma > 179.9):
-                        time = sat.jdsatepoch + 0.5*nocon/sat.nm*(3 - sat.mm/pi)
+                    if (sat.mo > radians(179.9)):
+                        t2_jd = sat.jdsatepoch + 0.5*nocon/sat.no_kozai*(3 - sat.mo/pi) # Use SGP4 elements
                     # if previously past apogee and past next perigee, go forward to apogee
                     else:
-                        time = sat.jdsatepoch + 0.5*nocon/sat.nm*(1 - sat.mm/pi)
+                        t2_jd = sat.jdsatepoch + 0.5*nocon/sat.no_kozai*(1 - sat.mo/pi) # Use SGP4 elements
 
-                # move time and satm.xmo to apogee
-                t2 = Date(time=time)
-                delta_t(sat,t2.jd) # FIXME: - this needs a delta time
-                # satm.delta_t(t2.jd) # FIXME python-SGP4
-                sat.jdsatepoch = t2.jd
-                # satm.rv2el(satm.rr, satm.vv) # FIXME python-SGP4
-                for i in range(0, 3):
-                    # loop to refine apogee, find when satm.xmo = pi
-                    t1 = Date(time=(sat.jdsatepoch + 0.5*nocon/sat.nm*(1 - sat.mm/pi)))
-                    sat = delta_t(sat,t2.jd) # FIXME: - this needs a delta time
-                    # satm.delta_t(t1.jd) # FIXME python-SGP4
-                    sat.jdsatepoch = t1.jd
-                    # satm.rv2el(satm.rr, satm.vv) # FIXME python-SGP4
-                ma = fmod(degrees(sat.mm), 360)
+                # move time and ma at apogee
+                sat = delta_t(sat,t2_jd)
+                sat.mm = posradang(sat.mm) # Use instantaneous mean element FIXME: cython SGP4 allows these to be negative sign
+                # loop to refine apogee, find when mean anomaly = pi
+                for i in range(0, 30):
+                    t1_jd = t2_jd + 0.5*nocon/sat.no_kozai*(1 - sat.mm/pi) # Use instantaneous mean elements except for no_kozai
+                    sat = delta_t(sat,t1_jd)
+                    sat.mm = posradang(sat.mm) # Use instantaneous mean element FIXME: cython SGP4 allows these to be negative sign
                 print("\nAPOGEE")
+                # Reinitialize satrec from current instantaneous mean elements and time (except mean motion)
+                sat = delta_el(sat,inclo=sat.im, nodeo=sat.Om, ecco=sat.em, argpo=sat.om, mo=sat.mm, no_kozai=sat.no_kozai, jdsatepoch=t1_jd)
                 print_el(sat)       # print new elements
 
                 # apogee residual
-                time = save_sat.jd                     # save sat epoch
-                save_sat = delta_t(save_sat,t2.jd) # FIXME: - this needs a delta time
-                # sat.delta_t(satm.jd)              # move sat to apogee # FIXME python-SGP4
-                delr = sat.rr - save_sat.rr           # compare sat and satm apogees
-                # delta_t(sat,t2.jd) # FIXME: - this needs a delta time
-                # sat.delta_t(time)                 # restore sat epoch # FIXME python-SGP4
-                print("\napogee delta {:5.0f}".format(mag(delr)*6378.135))  # kilometers
+                sat = delta_t(sat,sat.jdsatepoch)
+                save_sat = delta_t(save_sat,sat.jdsatepoch)
+                delr = sat.rr - save_sat.rr           # compare sat and satm perigees
+                print("\napogee delta {:5.0f}".format(mag(delr)*sat.radiusearthkm))
 
             # O(b) Pseudo observation?
             elif (buf == 'O'):
                 # move up one to make room for pseudo ob
                 # FIXME: Probably a pythonic way to do this 
-                for i in range(nobs-1, -1, -1):
-                    iod_line[i+1] = iod_line[i]
-                    ll[i+1] = ll[i]
-                    rd[i+1] = rd[i]
-                    odata[i+1] = odata[i]
+                # for i in range(nobs-1, -1, -1):
+                #     iod_line[i+1] = iod_line[i]
+                #     ll[i+1] = ll[i]
+                #     rd[i+1] = rd[i]
+                #     odata[i+1] = odata[i]
 
-                nobs+=1 # FIXME Global
-
+                sat = delta_t(sat,sat.jdsatepoch)
                 # ll is unit vector in same direction as satm.rr
-                ll[0] = sat.rr/mag(sat.rr)
+                ll = np.insert(ll,0,unit_vector(sat.rr),axis=0) # FIXME: This doesn't appear to check out with satfit.cpp
                 
                 # rd is unit vector (1 er) in same direction as satm.rr
-                rd[0] = sat.rr/mag(sat.rr)
+                rd = np.insert(rd,0,unit_vector(sat.rr),axis=0)
                 # odata holds epoch, ra, dc, obscode data
 
-                odata[0][0] = sat.jd
+                # odata[0][0] = sat.jdsatepoch
                 (ra, dc) = zrll(sat, rd[0]) # Get predicted position
-                odata[0][1] = radians(ra)
-                odata[0][2] = radians(dc)
-                odata[0][3] = 0000
+                odata = np.insert(odata,0,np.array((sat.jdsatepoch,radians(ra),radians(dc),0000,0)),axis=0)
+                # odata[0][1] = radians(ra)
+                # odata[0][2] = radians(dc)
+                # odata[0][3] = 0000
 
                 # print pseuso ob
                 #           1         2         3         4         5         6
                 # 0123456789012345678901234567890123456789012345678901234567890
                 # 36868 10 039A   2018 G 20100909203108300 17 25 2216290+034350 57
 
-                norad = int(iod_line[1])
-                yy    = int(iod_line[1] + 6)
-                desig = "{:4s}".format(iod_line[1] + 9)
-                desig[4] = '\0'
-                t1 = Date(time=(sat.jd))
+                # norad = int(iod_line[1])
+                # yy    = int(iod_line[1] + 6)
+                # desig = "{:4s}".format(iod_line[1] + 9)
+                # desig[4] = '\0'
+                yy = int(sat.intldesg[2:4])
+                desig = sat.intldesg[5:]
+                t1 = Date(time=(sat.jdsatepoch))
                 ra /= 15
-                rm = fmod(ra, rm)*60000
-                dm = fabs(fmod(dc, dm)*6000)
+                (ra, rm) = modf(ra)
+                rm *= 60000
+                # dm = fabs(fmod(dc, dm)*6000)
+                (dc, dm) = modf(dc)
+                dm *= 6000
                 print("\nPSEUDO OB:")
-                iod_line[0] = "\n{:05d} {:02d} {:4s}   0000 P {:4.0f}{:02.0f}{:02.0f}{:02.0f}{:02.0f}{:05.0f} 16 25 {:02.0f}{:05.0f}{:+03.0f}{:04.0f}\n".form(
-                    norad, yy, desig, t1.yy, t1.mm, t1.dd, t1.hr, t1.mn, t1.ss*1000, ra, rm, dc, dm)
+                iod_line[0] = "\n{:05d} {:02d} {:4s}   0000 P {:4.0f}{:02.0f}{:02.0f}{:02.0f}{:02.0f}{:05.0f} 16 25 {:02.0f}{:05.0f}{:+03.0f}{:04.0f}\n".format(
+                    sat.satnum, yy, desig, t1.yy, t1.mm, t1.dd, t1.hr, t1.mn, t1.ss*1000, ra, rm, dc, dm)
                 print(iod_line[0])
             # Energy 
+            # FIXME: Need to finish porting this
             elif (buf == 'E'):
                 buf = input("\ndelta specific energy(m^2/s^2): ")
                 buf = buf.strip()
 
                 try:
+                    sat = delta_t(sat,sat.jdsatepoch)
                     dE = float(buf)
                     dE /= 11300.168   # er^2 / min^2
                     vec = np.cross(sat.rr, sat.vv)
                     mu = mag(vec)
                     mu = mu*mu
-                    mu = mu / sat.aodp
+                    mu = mu / sat.a # Was sat.aodp
                     mu = mu / (1 - sat.eo*sat.eo)
-                    E2 = -0.5*mu / sat.aodp
+                    E2 = -0.5*mu / sat.a # Was sat.aodp
                     VV = sqrt(2*(E2 + dE + mu/mag(satm.rr)))  # new velocity magnitude
                     dV = unit_vector(sat.vv)   # velocity direction
                     dev = VV * dV               # new velocity vector
                     # sat = satm
                     sat.rv2el(sat.rr, vec)      # State vectors to mean elements #FIXME: python-SGP4
+                    satE = delta_el(sat,inclo=sat.im, nodeo=sat.Om, ecco=sat.em, argpo=sat.om, mo=sat.mm, no_kozai=sat.no_kozai, jdsatepoch=t1_jd)
                     print_el(sat)              # print new elements
                 except:
                     pass # TODO: need better exception handling here
@@ -2972,16 +3033,8 @@ def maneuver(sat, rd, ll, odata, sum):
                     print_el(sat)         # print original elements
             # QUIT Maneuver        
             elif (buf == 'Q'):
-                tle = sat.tle
-                ii = degrees(sat.xincl)
-                om = fmod(degrees(sat.xnodeo), 360)
-                ec = sat.eo
-                ww = fmod(degrees(sat.omegao), 360)
-                ma = fmod(degrees(sat.xmo), 360)
-                nn = sat.xno / nocon
-                bstar = sat.bstar
-                break
-    return sat
+                return sat
+
 
 def write_el(db, sat, rd, ll, odata, sum, start_rms):
     """
@@ -2991,22 +3044,22 @@ def write_el(db, sat, rd, ll, odata, sum, start_rms):
     """
     save_sat = copy.deepcopy(sat)
     while(True): # Forever loop
-        # When making a TLE, make sure to use the most recent obs_time available for setting epoch
-        epoch_jd = odata[-1][0]
-        print_satrec_coe(sat)
+        # # When making a TLE, make sure to use the most recent obs_time available for setting epoch
+        # epoch_jd = odata[-1][0]
+        # print_satrec_coe(sat)
 
-        # tau = t.epoch - Mean Anomaly/Mean motion - Time of perigee crossing
-        tau = sat.jdsatepoch - (sat.mo/sat.no_kozai)
-        new_ma = sat.no_kozai*(epoch_jd-tau) # Solve for new Mean Anomaly at last observation time
-        sat = delta_t(sat,epoch_jd)
+        # # tau = t.epoch - Mean Anomaly/Mean motion - Time of perigee crossing
+        # tau = sat.jdsatepoch - (sat.mo/sat.no_kozai)
+        # new_ma = sat.no_kozai*(epoch_jd-tau) # Solve for new Mean Anomaly at last observation time
+        # sat = delta_t(sat,epoch_jd)
 
-        sat2 = re_initsat(sat, new_ma, epoch_jd)
-        sat2 = delta_t(sat2,epoch_jd)
-        print("After reinit")
-        print_satrec_coe(sat2)
+        # sat2 = re_initsat(sat, new_ma, epoch_jd)
+        # sat2 = delta_t(sat2,epoch_jd)
+        # print("After reinit")
+        # print_satrec_coe(sat2)
 
-        print("sat1.rr {} sat1.vv {}".format(sat.rr,sat.vv))
-        print("sat2.rr {} sat2.vv {}".format(sat2.rr,sat2.vv))
+        # print("sat1.rr {} sat1.vv {}".format(sat.rr,sat.vv))
+        # print("sat2.rr {} sat2.vv {}".format(sat2.rr,sat2.vv))
 
         newTLE = make_tle_from_SGP4_satrec(sat,classification="T")
         # tle = sat.epoch
@@ -3206,9 +3259,8 @@ def initsat(TLE,gravconst="wgs72"):
         whichconst = earth_gravity.wgs72
     satrec.whichconst     = whichconst  # Python extension: remembers its consts
 
-    # FIXME: Can use jdSGP4epoch here directly with no subctraction, but need to trace all uses  (like the datetime comment above)
     rtn_code = sgp4init(satrec.whichconst, satrec.operationmode, satrec.satnum, 
-             satrec.jdsatepoch-2433281.5, # epoch time in days from jan 0, 1950. 0 hr
+             satrec.jdSGP4epoch, # epoch time in days from jan 0, 1950. 0 hr
              satrec.bstar, satrec.ndot, satrec.nddot, satrec.ecco, satrec.argpo, 
              satrec.inclo, satrec.mo, satrec.no_kozai, satrec.nodeo, satrec)
     if (rtn_code is not True):

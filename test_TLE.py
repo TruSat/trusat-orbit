@@ -387,25 +387,30 @@ class Tests(TestCase):
 
 def main():
     line00 = line0 + " Apogee"
-    line1 =  "1 28888U 05042A   14063.83505828 0.00032100  00000-0  29747-3 0    09"
+    line1  =  "1 28888U 05042A   14063.83505828 0.00032100  00000-0  29747-3 0    09"
     # 3 iters
     # line10 = '1 28888U 05042A   14063.82545230 0.00032100  00000-0  29747-3 0    09'
     # 30 iters
-    line10 = '1 28888U 05042A   14063.82545230 0.00032096  00000-0  29747-3 0    03'
+    line10  = '1 28888U 05042A   14063.82545230 0.00032096  00000-0  29747-3 0    03' # satfit.cpp
+    line100 = '1 28888T 05042A   14063.82545230 0.00032100  00000-0  29747-3 0    09' # Mine
               
-    line2 =  "2 28888  96.8945 115.9842 0499287 308.6206  51.3792 14.85742003    02"
+    line2  =  "2 28888  96.8945 115.9842 0499287 308.6206  51.3792 14.85742003    02"
     # 3 iters
     #line20 = '2 28888  96.8945 115.9758 0499291 308.6530   0.0000 14.85741387    00'
     # 30 iters
-    line20 = '2 28888  96.8945 115.9758 0499282 308.6530   0.0000 14.85741387    00'
-
-
+    line20  = '2 28888  96.8945 115.9758 0499282 308.6530   0.0000 14.85741387    00' # satfit.cpp
+    line200 = '2 28888  96.8945 115.9758 0499293 308.6530 360.0000 14.85742003    07' # mine
 
 
     # sat0 : Elements regressed to perigee by satfit.cpp TLE0 epoch
     TLE0 = satfit.TruSatellite(line0=line00, line1=line10, line2=line20)
     sat0 = satfit.initsat(TLE0)
     sat0 = satfit.delta_t(sat0,sat0.jdsatepoch)
+
+    # sat2 : Elements regressed to perigee by satfit.py TLE0 epoch
+    TLE2 = satfit.TruSatellite(line0=line00, line1=line100, line2=line200)
+    sat2 = satfit.initsat(TLE2)
+    sat2 = satfit.delta_t(sat2,sat0.jdsatepoch)
 
     # "satx: Original elements back-propagated to perigee (epoch of sat0)"
     TLE = satfit.TruSatellite(line0=line0, line1=line1, line2=line2)
@@ -414,15 +419,15 @@ def main():
 
     # satA : Elements created from sat0 mean elements after propagating to TLE0 epoch
     satA = copy.deepcopy(sat0)    
-    satA = satfit.delta_el(satA,xincl=satA.im,xnodeo=satA.Om,ec=satA.em,omegao=satA.om,xmo=satA.mm,xno=satA.nm,bsr=sat1.bstar)
+    satA = satfit.delta_el(satA,xincl=satA.im,xnodeo=satA.Om,ec=satA.em,omegao=satA.om,xmo=satA.mm,xno=satA.no_kozai,bsr=sat1.bstar, jdsatepoch=sat0.jdsatepoch)
     satA = satfit.delta_t(satA,sat0.jdsatepoch)
 
     # satB : Elements created from sat1 mean elements after propagating to TLE0 epoch
     satB = copy.deepcopy(sat1)    
-    satB = satfit.delta_el(satB,xincl=satB.im,xnodeo=satB.Om,ec=satB.em,omegao=satB.om,xmo=satB.mm,xno=satB.nm,bsr=sat1.bstar)
-    satB.jdsatepoch = sat0.jdsatepoch 
-    satB.jdSGP4epoch = satB.jdsatepoch - 2433281.5
-    satB.epoch_datetime = satfit.jday_to_datetime(satB.jdsatepoch)
+    satB = satfit.delta_el(satB,xincl=satB.im,xnodeo=satB.Om,ec=satB.em,omegao=satB.om,xmo=satB.mm,xno=satB.no_kozai,bsr=sat1.bstar, jdsatepoch=sat0.jdsatepoch)
+    # satB.jdsatepoch = sat0.jdsatepoch 
+    # satB.jdSGP4epoch = satB.jdsatepoch - 2433281.5
+    # satB.epoch_datetime = satfit.jday_to_datetime(satB.jdsatepoch)
     satB = satfit.delta_t(satB,sat0.jdsatepoch)
 
 
@@ -431,15 +436,16 @@ def main():
     (p, a, ecc, incl, omega, argp, nu, m, arglat, truelon, lonper) = rv2coe(satr.rr_km, satr.vv_kmpersec, satr.whichconst.mu)
     # satx = satfit.delta_el(sat1,xincl=sat1.inclo,xnodeo=sat1.nodeo,ec=sat1.ecco,omegao=sat1.argpo,xmo=sat1.mo,xno=sat1.no_kozai,bsr=sat1.bstar)
     mean_motion = sqrt(satr.whichconst.mu/(pow(a,3)))*60.0 # radians per minute
-    satr = satfit.delta_el(satr,xincl=incl,xnodeo=omega,ec=ecc,omegao=argp,xmo=m,xno=mean_motion,bsr=satr.bstar)
-    satr.jdsatepoch = sat0.jdsatepoch 
-    satr.jdSGP4epoch = satr.jdsatepoch - 2433281.5
-    satr.epoch_datetime = satfit.jday_to_datetime(satr.jdsatepoch)
+    satr = satfit.delta_el(satr,xincl=incl,xnodeo=omega,ec=ecc,omegao=argp,xmo=m,xno=mean_motion,bsr=satr.bstar, jdsatepoch=sat0.jdsatepoch)
+    # satr.jdsatepoch = sat0.jdsatepoch 
+    # satr.jdSGP4epoch = satr.jdsatepoch - 2433281.5
+    # satr.epoch_datetime = satfit.jday_to_datetime(satr.jdsatepoch)
     satr = satfit.delta_t(satr,sat0.jdsatepoch)
 
 
     print()
     print("sat1: Original elements back-propagated to perigee (epoch of sat0)")
+    print("sat2 : Elements regressed to perigee by satfit.py TLE0 epoch")
     print("sat0 : Elements regressed to perigee by satfit.cpp TLE0 epoch")
     print("satA : Elements created from sat0 mean elements after propagating to TLE0 epoch")
     print("satB : Elements created from sat1 mean elements after propagating to TLE0 epoch")
@@ -447,6 +453,7 @@ def main():
     print()
     print("At TLE epoch jd {}".format(sat0.jdsatepoch))
     print("sat1.rr {} sat1.vv {}".format(sat1.rr_km,sat1.vv_kmpersec))
+    print("sat2.rr {} sat2.vv {}".format(sat2.rr_km,sat2.vv_kmpersec))
     print("sat0.rr {} sat0.vv {}".format(sat0.rr_km,sat0.vv_kmpersec))
     print("satA.rr {} satA.vv {}".format(satA.rr_km,satA.vv_kmpersec))
     print("satB.rr {} satB.vv {}".format(satB.rr_km,satB.vv_kmpersec))
@@ -455,16 +462,32 @@ def main():
     dayahead = sat0.jdsatepoch + 1
     sat0 = satfit.delta_t(sat0,dayahead)
     sat1 = satfit.delta_t(sat1,dayahead) # Changing tsince changes the mean elements
+    sat2 = satfit.delta_t(sat2,dayahead) # Changing tsince changes the mean elements
     satA = satfit.delta_t(satA,dayahead)
     satB = satfit.delta_t(satB,dayahead)
     print()
-    print("At TLE epoch jd {}".format(dayahead))
+    print("At TLE epoch jd {} (Epoch + 1 day)".format(dayahead))
     print("sat1.rr {} sat1.vv {}".format(sat1.rr_km,sat1.vv_kmpersec))
+    print("sat2.rr {} sat2.vv {}".format(sat2.rr_km,sat2.vv_kmpersec))
     print("sat0.rr {} sat0.vv {}".format(sat0.rr_km,sat0.vv_kmpersec))
     print("satA.rr {} satA.vv {}".format(satA.rr_km,satA.vv_kmpersec))
     print("satB.rr {} satB.vv {}".format(satB.rr_km,satB.vv_kmpersec))
     print("satr.rr {} satr.vv {}".format(satr.rr_km,satr.vv_kmpersec))
 
+    dayahead = sat0.jdsatepoch + 10
+    sat0 = satfit.delta_t(sat0,dayahead)
+    sat1 = satfit.delta_t(sat1,dayahead) # Changing tsince changes the mean elements
+    sat2 = satfit.delta_t(sat2,dayahead) # Changing tsince changes the mean elements
+    satA = satfit.delta_t(satA,dayahead)
+    satB = satfit.delta_t(satB,dayahead)
+    print()
+    print("At TLE epoch jd {} (Epoch + 10 day)".format(dayahead))
+    print("sat1.rr {} sat1.vv {}".format(sat1.rr_km,sat1.vv_kmpersec))
+    print("sat2.rr {} sat2.vv {}".format(sat2.rr_km,sat2.vv_kmpersec))
+    print("sat0.rr {} sat0.vv {}".format(sat0.rr_km,sat0.vv_kmpersec))
+    print("satA.rr {} satA.vv {}".format(satA.rr_km,satA.vv_kmpersec))
+    print("satB.rr {} satB.vv {}".format(satB.rr_km,satB.vv_kmpersec))
+    print("satr.rr {} satr.vv {}".format(satr.rr_km,satr.vv_kmpersec))
 
     # print()
     # print("At TLE epoch")
