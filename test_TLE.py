@@ -326,6 +326,26 @@ def compare_satrecs(sata,satb):
 
 
 class Tests(TestCase):
+    # TLE Epoch Test
+    TestCase.epoch_string = '19236.07927356'
+    def test_datetime_from_tle_fmt(self):
+        TestCase.epoch_datetime = tle_util.datetime_from_tle_fmt(TestCase.epoch_string)
+
+        self.assertEqual(TestCase.epoch_datetime.year,2019)
+        self.assertEqual(TestCase.epoch_datetime.timetuple().tm_yday,236) 
+        self.assertEqual(TestCase.epoch_datetime.month,8)
+        self.assertEqual(TestCase.epoch_datetime.day,24)
+        self.assertEqual(TestCase.epoch_datetime.hour,1)
+        self.assertEqual(TestCase.epoch_datetime.minute,54)
+        self.assertEqual(TestCase.epoch_datetime.second,9)
+        self.assertEqual(TestCase.epoch_datetime.microsecond,235584)
+
+
+    def test_tle_fmt_epoch(self):
+        epoch_string_test = tle_util.tle_fmt_epoch(TestCase.epoch_datetime)
+        self.assertEqual(epoch_string_test,TestCase.epoch_string)
+
+
     def test_satrec_to_TLE(self):
         TLE = satfit.TruSatellite(line0=line0, line1=line1, line2=line2)
 
