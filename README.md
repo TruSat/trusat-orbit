@@ -16,7 +16,6 @@ Modified from [pyorbital](https://github.com/pytroll/pyorbital/blob/master/RELEA
 5. push changes to github `git push --follow-tags`
 7. check verification tools
 
-
 ## Running tests
 
 There are two separate ways to use `test_TLE.py`. They do very different things.
@@ -30,3 +29,16 @@ To execute the `main()` function, just execute it. E.g.:
 `python3.7 test_TLE.py`
 
 !TODO: what's the reason to do the latter? Why doesn't the latter do the same as the former?
+
+### Include database tests
+
+Set the following environment variables before running your test:
+
+- `TRUSAT_DATABASE_NAME`
+- `TRUSAT_DATABASE_HOST`
+- `TRUSAT_DATABASE_USER`
+- `TRUSAT_DATABASE_PASSWORD`
+
+E.g. run:
+
+`TRUSAT_DATABASE_NAME=opensatcat_local TRUSAT_DATABASE_HOST=127.0.0.1 TRUSAT_DATABASE_USER=test TRUSAT_DATABASE_PASSWORD=test python3.7 -m unittest -v test_TLE.Tests`
