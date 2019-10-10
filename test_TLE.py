@@ -4,15 +4,18 @@ import os
 import sys
 from math import degrees, radians, pi, fmod, sqrt, pow
 import copy
+import json
+from datetime import datetime
 
 try:
-    from unittest2 import TestCase, main
+    from unittest2 import TestCase, main, skipUnless
 except:
-    from unittest import TestCase, main
+    from unittest import TestCase, main, skipUnless
 
 # These are necessary until Brandon Rhodes approves pull requests
 # https://github.com/brandon-rhodes/python-sgp4/pull/35
 sys.path.insert(1, '../python-sgp4')
+sys.path.insert(1, '../trusat-backend')
 
 try:
     from sgp4.cpropagation import sgp4, sgp4init
@@ -23,7 +26,7 @@ from sgp4.ext import invjday, days2mdhms, rv2coe
 from sgp4.io import twoline2rv
 from sgp4.model import Satellite
 from sgp4 import earth_gravity
-
+import database
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG) 
@@ -42,6 +45,14 @@ line2 = "2 28888  96.8945 115.9842 0499287 308.6206  51.3792 14.85742003    02"
 # 2014-03-04T20:02:29.035392
 # 23439.8350582798
 # 2456721.33505828
+
+def serialize(obj):
+    """JSON serializer for objects not serializable by default json code"""
+
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+
+    return obj.__dict__
 
 def compare_satrecs(sata,satb):
     # A most unholy quick hack until we can parse Class attributes more expertly
@@ -321,6 +332,17 @@ def compare_satrecs(sata,satb):
 class Tests(TestCase):
     # TLE Epoch Test
     TestCase.epoch_string = '19236.07927356'
+    TestCase.maxDiff = None
+    
+    def compare_satrecs_as_JSON(self, gotSat, expectedSat):
+        # !TODO: there may be parts of the TruSatellite objects that are expected to differ
+        # after a database round trip (e.g. tle_id, import_timestamp?).
+        # If so, these can be munged out here before comparison.
+        self.assertEqual(
+            json.dumps(gotSat, default=serialize, indent=4, sort_keys=True),
+            json.dumps(expectedSat, default=serialize, indent=4, sort_keys=True)
+        )
+
     def test_datetime_from_tle_fmt(self):
         TestCase.epoch_datetime = tle_util.datetime_from_tle_fmt(TestCase.epoch_string)
 
@@ -338,10 +360,11 @@ class Tests(TestCase):
         epoch_string_test = tle_util.tle_fmt_epoch(TestCase.epoch_datetime)
         self.assertEqual(epoch_string_test,TestCase.epoch_string)
 
+    def assert_expected_TLE(self, TLE):
+        """ Asserts that the TLE contents are as expected for the two tests below.
 
-    def test_satrec_to_TLE(self):
-        TLE = satfit.TruSatellite(line0=line0, line1=line1, line2=line2)
-
+            Also calls satfit.initsat and checks that the result is as expected.
+        """
         # Verify the data in the TLE made it exactly to the TLE object
         self.assertEqual(TLE.satellite_number,28888)
         self.assertEqual(TLE.classification,'U')
@@ -396,6 +419,31 @@ class Tests(TestCase):
         self.assertEqual(TLE.mean_motion_radians_per_minute, sat1.no_kozai)
         self.assertEqual(TLE.mean_motion_orbits_per_day, sat1.no_kozai/nocon)
         self.assertEqual(TLE.mean_motion_radians_per_second, sat1.no_kozai/60)  
+
+    def test_satrec_to_TLE(self):
+        TLE = satfit.TruSatellite(line0=line0, line1=line1, line2=line2)
+
+        # Verify the data in the TLE made it exactly to the TLE object
+        self.assert_expected_TLE(TLE) 
+
+    @skipUnless(os.getenv('TRUSAT_DATABASE_NAME', False), "No database configured; skipping")
+    def test_satrec_to_TLE_persisted(self):
+        TLE = satfit.TruSatellite(line0=line0, line1=line1, line2=line2)
+
+        # Persist this to our database and get it back out, to make sure we do not lose or change data
+        db = database.Database()
+
+        try:
+            db.addTLE(TLE)
+            TLE_ID = db.write_TLEs_to_db()  
+            TLE_from_database = db.get_TLE(TLE_ID)
+
+            # Verify the data in the TLE made it exactly to the TLE object
+            self.compare_satrecs_as_JSON(TLE_from_database, TLE)
+            self.assert_expected_TLE(TLE_from_database) 
+
+        finally:
+            db.clean()
 
 
 def main():
