@@ -392,14 +392,15 @@ class TruSatellite(object):
         # Convenience variables
         _GEsqrt = TruSatellite._GEsqrt
         _XKMPER = TruSatellite._XKMPER
-        self.name = self.line0
+
 
         # If we are being asked to parse a TLE
         if (line1 and line2):
             self.line1 = line1.rstrip()
             self.line2 = line2.rstrip()
             if (line0):
-                self.line0     = line0.rstrip()
+                self.line0 = line0.rstrip()
+                self.name  = re.sub("^0 ", "", self.line0)
 
             # Step through TLE import process
             try:
@@ -457,6 +458,7 @@ class TruSatellite(object):
 
         # Parse line 0
         self.name_long = self.line0[0:24].rstrip()
+        self.name_long  = re.sub("^0 ", "", self.name_long)
 
         # Parse line 1
         try:
@@ -835,7 +837,7 @@ def make_tle(*, name="None", ssn, desig="0000000", epoch_datetime, xincl, xnodeo
     # //            ,ssn, desig, tle, xns, bstar_fract, bstar_exp);
 
     if name:
-        line0  = "{:24s}".format(name) 
+        line0  = "0 {:22s}".format(name) 
         if not quiet:
             print("{:s}".format(line0))
 
@@ -869,7 +871,7 @@ def make_tle_from_SGP4_satrec(satrec, classification="T"):
 
     TLE.line0 = satrec.line0
 
-    TLE.sat_name = TLE.name	            = satrec.line0
+    TLE.sat_name = TLE.name	            = re.sub("^0 ", "", satrec.line0)
     TLE.satellite_number	            = satrec.satnum
     TLE.classification		            = classification  
     TLE.designation			            = satrec.intldesg
