@@ -43,3 +43,18 @@ With the addition of commits to the master branch are done through PRs (Pull Req
 [Version Numbering](semver.org)
 5. push changes to github `git push --follow-tags`
 7. check verification tools
+
+
+## Running tests
+
+There are two separate ways to use `test_TLE.py`. They do very different things.
+
+To run the tests, use Python3's `unittest` module. E.g.: 
+
+`python3.7 -m unittest -v test_TLE.Tests`
+
+To execute the `main()` function, just execute it. E.g.:
+
+`python3.7 test_TLE.py`
+
+!TODO: what's the reason to do the latter? Why doesn't the latter do the same as the former?
