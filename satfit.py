@@ -28,9 +28,9 @@ from spacetrack import SpaceTrackClient
 
 # These are necessary until Brandon Rhodes approves pull requests
 # https://github.com/brandon-rhodes/python-sgp4/pull/35
-sys.path.insert(1, '/Users/chris/Dropbox/code/MVP/python-sgp4')
+sys.path.insert(1, '../python-sgp4')
 # https://github.com/skyfielders/python-skyfield/pull/276
-sys.path.insert(2, '/Users/chris/Dropbox/code/MVP/python-skyfield')
+# sys.path.insert(2, '/Users/chris/Dropbox/code/MVP/python-skyfield') # unused
 
 # from skyfield.iokit import Loader, download, parse_tle
 # from skyfield import sgp4lib
