@@ -66,6 +66,7 @@ nocon = twopi/1440.0
 de2ra = pi/180.0
 
 db = None
+startDate = False
 
 # TODO: Make a class of these?
 srch = "W"      # Search scope
@@ -1230,7 +1231,7 @@ def print_fit(sat, rd, ll, odata, last_rms): # WORKS
         timestring = obstime.strftime('%y%j %H%M:%S')
         SSS = obstime.strftime('%f')
         SSS = int(1000*(int(SSS)/1E6))
-        fit_string = "({:2d}) {:04d}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}  {:7.5f}".format(
+        fit_string = "({:2d}) {:04d}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}  {:8.5f}".format(
             j + 1, int(odata[j][3]), timestring, SSS, az, el, asp, xtrk, delt, Perr, tsince_days)
         print(fit_string)
 
@@ -1478,7 +1479,7 @@ def diff_el(sat, rd, ll, odata, sum):
             break
 
     sat = delta_el(sat)
-    print("                  {} diff_el iter".format(c))
+    # print("                  {} diff_el iter".format(c))
 
     return sat
     # /*
@@ -1980,8 +1981,10 @@ def accept_command(db, sat, rd, ll, odata, sum, uu, iod_line):
         # Visible functions
         elif (cmd == "S"):  # Step
             sat = step(sat, rd, ll, odata, sum, uu, "S")
+            print_el(sat)       # print new elements
         elif (cmd == "Z"):
             sat = step(sat, rd, ll, odata, sum, uu, "Z")
+            print_el(sat)       # print new elements
         elif (cmd == "I"):  # Incl
             print_el(sat)
             sat = incl(sat, rd, ll, odata, sum)
@@ -2181,12 +2184,13 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
     omax = degrees(sat.nodeo) + 2
     omin = degrees(sat.nodeo) - 2
 
-    print("\nPress Q to Quit    :\n")
+    # We're not currently capturing input while step() is a loop, so supress this note
+    # print("\nPress Q to Quit    :\n")
     xsum = 0
     lc = 0
     stp_start = time()
     DE = 0
-    while(fabs(sum-xsum)>1e-4):
+    while(fabs(sum-xsum)>1e-3):
         lc+=1
         xsum = sum
         ps_start = time()
@@ -2234,7 +2238,8 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
         PS = ns_start - ps_start
         NS = de_start - ns_start
         ELAPSED = stp_lap - stp_start
-        print("rms{:12.5f}   Lap time: {:.2f}  PS {:.2f}  NS {:.2f}  DE {:.2f}  --  Elapsed {:.1f} / {}".format(sum, lap, PS, NS, DE, ELAPSED, lc))
+        print("rms{:12.5f}   Lap time: {:.2f}  PS {:.2f}  NS {:.2f}  DE {:.2f}  --  Elapsed {:.1f} / {}\t".format(sum, lap, PS, NS, DE, ELAPSED, lc),end='\r')
+        sys.stdout.flush()
         # buf = input("    : ")
 
         # try:
@@ -2249,7 +2254,6 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
 
 
     sum = print_fit(sat, rd, ll, odata, last_rms)
-    print_el(sat)       # print new elements
 
     srch = 'N' # FIXME: Fix this global
     return sat
@@ -3039,6 +3043,8 @@ def write_el(db, sat, rd, ll, odata, sum, start_rms):
 
     TODO: Not sure what it should 'return' as it nominally does not update in the working variables.
     """
+    global startDate
+
     save_sat = copy.deepcopy(sat)
     while(True): # Forever loop
         # # When making a TLE, make sure to use the most recent obs_time available for setting epoch
@@ -3071,7 +3077,7 @@ def write_el(db, sat, rd, ll, odata, sum, start_rms):
 
         print("\n(U)pdate (V)iew (A)ppend (O)riginal (R)estore", end='')
         if (db):
-            print("\nDATABASE: (I)nsert new TLE (Q)uit", end='')
+            print("\nDATABASE: (I)nsert new TLE (L)oop insert (Q)uit", end='')
         else:
             print(" (Q)uit")
 
@@ -3118,7 +3124,7 @@ def write_el(db, sat, rd, ll, odata, sum, start_rms):
                 for i in range(nobs): # FIXME More pythonic way
                     fp.write("{:s}".format(iod_line[i]))
         # Insert TLE and TLE_process results to database
-        elif (buf == 'I'):
+        elif (buf == 'I' or buf == 'L'):
             newTLE_process = {}
             (sum, newTLE_process) = calc_fit(sat, rd, ll, odata, sum, newTLE_process)
 
@@ -3126,7 +3132,11 @@ def write_el(db, sat, rd, ll, odata, sum, start_rms):
 
             result = db.addTruSatTLE(newTLE, newTLE_process, sat.parent_tle_id, start_rms, sum, remarks)
             if (result):
-                main(db)
+                startDate = newTLE.epoch_datetime
+                if (buf == 'I'):
+                    object_search(db, startDate=startDate, object=newTLE.satellite_number)
+                elif (buf == 'L'):
+                    object_process(db, startDate=startDate, object=newTLE.satellite_number)
             else:
                 log.error("DB Insert failed.")
         # QUIT write_el
@@ -3439,20 +3449,32 @@ def iod_search(db=False):
     # Accept a new command
     accept_command(db, sat, rd, ll, odata, sum, uu, iod_line)
 
-def object_search(db=False):
+def object_search(db=False,startDate=False,object=False):
     global iod_line #FIXME: get rid of this global
 
     while(True):
-        try:
-            object_inp = input("\nEnter norad number of object: ")
-            object = int(object_inp.strip())
-        except:
-            pass
+        if not object:
+            try:
+                object_inp = input("\nEnter norad number of object: ")
+                object = int(object_inp.strip())
+            except:
+                pass
 
-        IOD_candidates = db.findObservationCluster(object)
+        if not (startDate):
+            result = db.findDateNewestTTLE(object)
+            if (result):
+                startDate = result
+                classification='T'
+                print("Continuing processing at: {}".format(startDate))
+            else:
+                startDate = datetime(1957,10,4,19,28,34,0)
+                classification='U'
+                print("Processing since the beginning of time")
+
+        IOD_candidates = db.findObservationCluster(object,startDate=startDate,minObserverCount=1)
         if (len(IOD_candidates)==0):
             print("No observations found for norad_number {}".format(object))
-            continue
+            main(db)
 
         IODs = db.selectIODlist(IOD_candidates)
 
@@ -3461,7 +3483,10 @@ def object_search(db=False):
             iod_line.append(i.iod_string)
 
         try:
-            TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object)    # FIXME: Probably want to call elfind in a rebuild case
+            if (classification=='T'):
+                TLE = db.selectTLEEpochBeforeDate(IODs[0].obs_time, object,classification=classification)    # FIXME: Probably want to call elfind in a rebuild case
+            else:
+                TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object)    # FIXME: Probably want to call elfind in a rebuild case
             print("Using tle_id {} as reference:".format(TLE.tle_id))
             print("{}".format(TLE.name))
             print("{}".format(TLE.line1))
@@ -3519,6 +3544,82 @@ def object_search(db=False):
 
     # Accept a new command
     accept_command(db, sat, rd, ll, odata, sum, uu, iod_line)
+
+
+def object_process(db=False,startDate=False,object=False):
+    """ object_process: Loop through all observations for a particular object """
+    result = True # Start the loop off
+    while (result):
+        IOD_candidates = db.findObservationCluster(object,startDate=startDate,minObserverCount=1)
+        if (len(IOD_candidates)==0):
+            print("No more observations found for norad_number {}".format(object))
+            main(db)
+
+        IODs = db.selectIODlist(IOD_candidates)
+
+        iod_line = []
+        for i in IODs:
+            iod_line.append(i.iod_string)
+
+        try:
+            TLE = db.selectTLEEpochBeforeDate(IODs[0].obs_time, object,classification='T')    # FIXME: Probably want to call elfind in a rebuild case
+            print("Using tle_id {} as reference:".format(TLE.tle_id))
+            print("{}".format(TLE.name))
+            print("{}".format(TLE.line1))
+            print("{}".format(TLE.line2))
+        except:
+            log.warning("NO TLE found for object '{}' with EPOCH before {}".format(object,IODs[0].obs_time))
+            main(db)
+
+        Stations = db.getStationDictforIODs(IODs)
+        if (not len(Stations)):
+            log.warning("NO Station data found for observations.")
+            main(db)
+
+        (odata, ll, rd, t1) = read_obssf(IODs, Stations) # Use the scott-campbell way while debugging against satfit.cpp
+
+        sat = initsat(TLE)
+        sat.thetag = t1.thetag  # FIXME: Find a different way to get this, or how its used in anomaly()
+        sat.parent_tle_id = TLE.tle_id
+        nobs = len(IODs)
+
+        start_rms = find_rms(sat, rd, ll, odata) # Establish baseline rms for global
+        print("\n{} Observations Found".format(nobs))
+        # print("\nStarting rms{:12.5f}".format(start_rms))
+
+        age = odata[-1][0] - sat.jdsatepoch
+        print("TLE Age from last OBS: {:.2f} days".format(age))    
+
+        sum = print_fit(sat, rd, ll, odata, start_rms)
+
+        sat = move_epoch_to_jd(sat,odata[-1][0])
+        # print_el(sat)
+        # sum = print_fit(sat, rd, ll, odata, sum)
+
+        # // calculate uu, degrees, for search
+        uu = longitude(sat)
+        sat = step(sat, rd, ll, odata, sum, uu, "S")
+
+        # # // calculate uu, degrees, for search
+        # uu = longitude(sat)
+        # sat = step(sat, rd, ll, odata, sum, uu, "Z")
+
+        print_el(sat)
+        sum = print_fit(sat, rd, ll, odata, sum)
+
+        newTLE = make_tle_from_SGP4_satrec(sat,classification="T")
+
+        newTLE_process = {}
+        (sum, newTLE_process) = calc_fit(sat, rd, ll, odata, sum, newTLE_process)
+
+        remarks = "object_process automatic TLE"
+
+        result = db.addTruSatTLE(newTLE, newTLE_process, sat.parent_tle_id, start_rms, sum, remarks)
+        if (result):
+            startDate = newTLE.epoch_datetime
+        else:
+            log.error("DB Insert failed.")
+            main(db)
 
 
 # /////////////////// MAIN //////////////////////////////////////////////////////
