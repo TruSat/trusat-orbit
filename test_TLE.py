@@ -12,7 +12,7 @@ except:
 
 # These are necessary until Brandon Rhodes approves pull requests
 # https://github.com/brandon-rhodes/python-sgp4/pull/35
-sys.path.insert(1, '/Users/chris/Dropbox/code/MVP/python-sgp4')
+sys.path.insert(1, '../python-sgp4')
 
 try:
     from sgp4.cpropagation import sgp4, sgp4init
@@ -28,14 +28,7 @@ import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG) 
 
-# The following 5 lines are necessary until our modules are public
-import inspect
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-tle_path = os.path.join(parentdir, "trusat-tle")
-sys.path.insert(1,tle_path)
 import tle_util   
-
 import satfit
 
 # Global variables
