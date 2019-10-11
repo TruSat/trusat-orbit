@@ -1246,6 +1246,34 @@ def print_fit(sat, rd, ll, odata, last_rms): # WORKS
     print("\nrms{:12.5f} ({:.5f})".format(rms, delta_rms))
     return rms
 
+
+def print_calc_fit(sat, rd, ll, odata, last_rms, TLE_process):
+    fit_string = "\n      STA  YYday HHMM:SSsss   RA     DEC    ASP     XTRK    deltaT   Perr   Delta-Epoch"
+    # fit_string = "\n      STA  YYday HHMM:SSsss   RA     DEC     XTRK    deltaT   Perr   Delta-Epoch"
+    print(fit_string)
+    for j in range(len(odata)):
+        # # Format time string
+        # # YYday HHMM:SSsss
+        tsince_days = (odata[j][0] - sat.jdsatepoch) # time since epoch in days 
+        tsince = tsince_days * 1440.0 # time since epoch in minutes # TODO: Clean up this calculation
+        obstime = sat.epoch_datetime + timedelta(minutes=tsince)
+        timestring = obstime.strftime('%y%j %H%M:%S')
+        SSS = obstime.strftime('%f')
+        SSS = int(1000*(int(SSS)/1E6))
+
+        obs_id = int(odata[j][4])   # FIXME Need to convert to int from numpy float. Probably a better way to store all this.
+        fit_string = "({:2d}) {:04d}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}  {:8.5f}".format(
+            j + 1, int(odata[j][3]), timestring, SSS, 
+            degrees(odata[j][1]), 
+            degrees(odata[j][2]), 
+            TLE_process[obs_id]["aspect"], 
+            TLE_process[obs_id]["cross_track_err"], 
+            TLE_process[obs_id]["time_err"], 
+            TLE_process[obs_id]["position_err"],
+            tsince_days)
+        print(fit_string)
+                 
+
 # ////////////////// FUNCTIONS //////////////////////////////////////////////////
 
 def asym(a1, a2, a3):
@@ -2190,7 +2218,7 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
     lc = 0
     stp_start = time()
     DE = 0
-    while(fabs(sum-xsum)>1e-3):
+    while(fabs(sum-xsum)>1e-4):
         lc+=1
         xsum = sum
         ps_start = time()
@@ -3484,7 +3512,7 @@ def object_search(db=False,startDate=False,object=False):
 
         try:
             if (classification=='T'):
-                TLE = db.selectTLEEpochBeforeDate(IODs[0].obs_time, object,classification=classification)    # FIXME: Probably want to call elfind in a rebuild case
+                TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object,classification=classification)    # FIXME: Probably want to call elfind in a rebuild case
             else:
                 TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object)    # FIXME: Probably want to call elfind in a rebuild case
             print("Using tle_id {} as reference:".format(TLE.tle_id))
@@ -3622,6 +3650,118 @@ def object_process(db=False,startDate=False,object=False):
             main(db)
 
 
+def object_tle_test(db=False):
+    """ object_tle_test: Loop through all observations for a particular object, generate TLE_process RMS from existing TLEs without fit. """
+    object = False
+
+    objects = db.findObjectsWithIODsNotUsedInTTLEs()
+    for object in objects:
+        first_try = True
+        result = True # Start the loop off
+        while (result):
+            time_loop_start = time()
+            if first_try:
+                # Set up the beginning of the loop
+                try:
+                    # object_inp = input("\nEnter norad number of object: ")
+                    # object = int(object_inp.strip())
+
+                    TLE1 = False
+                    startTime = 0
+                    TLE2 = db.findFirstIODandTLE(object)
+                    endTime = TLE2.epoch_datetime
+
+                    first_try = False
+
+                except:
+                    print("No more unprocessed TLEs found for norad_number {}".format(object))
+                    # main(db)
+                    result = False
+                    continue
+
+            IODs = db.selectIODlistSubmitRange(object, startTime, endTime)
+
+            if not IODs:
+                print("No obs for object {} between {} and {}".format(object,startTime,endTime))
+                TLE2 = db.findNextUnprocessedTLE(object,endTime)
+                if not TLE2:
+                    print("No more unprocessed TLEs found for norad_number {} after epoch {}".format(object, endTime))
+                    result = False
+                    continue
+                else:
+                    endTime = TLE2.epoch_datetime
+                    continue
+
+            iod_line = []
+            for i in IODs:
+                iod_line.append(i.iod_string)
+
+            Stations = db.getStationDictforIODs(IODs)
+            if (not len(Stations)):
+                log.warning("NO Station data found for observations.")
+                result = False
+                continue
+
+            (odata, ll, rd, t1) = read_obssf(IODs, Stations) # Use the scott-campbell way while debugging against satfit.cpp
+
+            try:
+                if (TLE1):
+                    sat = initsat(TLE1)
+                    sat.parent_tle_id = TLE1.tle_id
+                else:
+                    sat = initsat(TLE2)
+                    sat.parent_tle_id = TLE2.tle_id
+
+                print("\n\nUsing tle_id {} as reference".format(sat.parent_tle_id))
+                print("{}".format(sat.line0))
+                print("{}".format(sat.line1))
+                print("{}".format(sat.line2))
+            except:
+                log.warning("Failed to initsat()")
+                # main(db)
+                result = False
+                continue
+
+            sat.thetag = t1.thetag  # FIXME: Find a different way to get this, or how its used in anomaly()
+
+            # start_rms = find_rms(sat, rd, ll, odata) # Establish baseline rms for global
+            # sum = print_fit(sat, rd, ll, odata, start_rms)
+
+            time_to_calc_fit = time()
+            TLE_process = {}
+            (sum, TLE_process) = calc_fit(sat, rd, ll, odata, 0, TLE_process)
+            print_calc_fit(sat, rd, ll, odata, sum, TLE_process)
+            remarks = "McCants TLE loop baseline"
+            time_calc_fit = time()
+
+            result = db.addTruSatTLE(False, TLE_process, sat.parent_tle_id, sum, sum, remarks, satellite_number=object, tle_result_id=TLE2.tle_id)
+            time_to_insert = time()
+
+            if (result):
+                TLE1 = TLE2
+                TLE2 = db.findNextUnprocessedTLE(object,TLE1.epoch_datetime)
+                if not TLE2:
+                    print("No more unprocessed TLEs found for norad_number {} after epoch {}".format(object, TLE1.epoch_datetime))
+                    # main(db)
+                    result = False
+                    continue
+                else:
+                    startTime = TLE1.epoch_datetime
+                    endTime = TLE2.epoch_datetime
+                    time_end = time()
+                    print("Performance: Loop {:3f} Initialize {:.3f}  calc_fit {:.3f}  insert {:3f}".format(
+                        time_end - time_loop_start,
+                        time_to_calc_fit - time_loop_start,
+                        time_calc_fit - time_to_calc_fit,
+                        time_to_insert - time_calc_fit
+                    ))
+
+            else:
+                log.error("DB Insert failed.")
+                # main(db)
+                result = False
+                continue
+
 # /////////////////// MAIN //////////////////////////////////////////////////////
 
 def main(db=False):
@@ -3686,7 +3826,7 @@ def main(db=False):
     # iod_obs_id = input("IOD db ID: ")
     while(True):
         print("\nEnter command")
-        print("Database: (I)OD search (O)bject search (L)atest  q(U)eue")
+        print("Database: (I)OD search (O)bject search (L)atest (M)cCants TLE baseline q(U)eue")
         print("(Q)uit")
 
         cmd = input(": ").strip()
@@ -3696,6 +3836,8 @@ def main(db=False):
             iod_search(db)
         elif (cmd == "O"):  # Object search
             object_search(db)
+        elif (cmd == "M"):  # McCants TLE baseline
+            object_tle_test(db)
         elif (cmd == "L"):  # Latest observations
             pass
         elif (cmd == "U"):  # View the queue
