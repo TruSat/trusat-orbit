@@ -408,16 +408,7 @@ class TruSatellite(object):
                 self._parse_tle()
                 self._validity_check_tle()
                 self._fingerprint_tle()
-
-                self.period = 2*pi/(self.mean_motion_radians_per_second)                            # In seconds
-                self.semi_major_axis = pow(_GEsqrt / self.mean_motion_radians_per_second,2/3)  # in km
-                self.perigee = self.semi_major_axis*(1 - self.eccentricity) - _XKMPER               # in km
-                if(self.perigee < 0):
-                    log.warning("{}: Perigee {:0f} intersects the Earth.".format(self._tle_source_filename, self.perigee))
-
-                self.apogee  = self.semi_major_axis*(1 + self.eccentricity) - _XKMPER               # in km
-
-                # Add in the calculations for the non SGP4 things here...
+                self.derived_values()
 
             except TLEValueError:
                 log.warning("{}: Encountered errors in processing the following TLE block:\t{}\n\t{}\n\t{}".format(self._tle_source_filename, self.line0,self.line1,self.line2))
@@ -448,7 +439,17 @@ class TruSatellite(object):
             self._id_launch_num = int(self.designation[5:8])
         if (self.designation and not self._id_launch_piece_letter):
             self._id_launch_piece_letter = self.designation[8:].strip()
-            
+
+        self.period = 2*pi/(self.mean_motion_radians_per_second)                            # In seconds
+        self.semi_major_axis = pow(TruSatellite._GEsqrt / self.mean_motion_radians_per_second,2/3)  # in km
+        self.perigee = self.semi_major_axis*(1 - self.eccentricity) - TruSatellite._XKMPER               # in km
+        if(self.perigee < 0):
+            log.warning("{}: Perigee {:0f} intersects the Earth.".format(self._tle_source_filename, self.perigee))
+
+        self.apogee  = self.semi_major_axis*(1 + self.eccentricity) - TruSatellite._XKMPER               # in km
+
+        # Add in the calculations for the non SGP4 things here...
+
         # TODO: Determine if we should create these if not defined from source information, although these are not stored in the DB
         # _epoch_day
         # _epoch_year
@@ -518,6 +519,7 @@ class TruSatellite(object):
                     self.designation = "{:4d}-{:>03d}{:<3s}".format(self._id_launch_year,
                                                                     self._id_launch_num,
                                                                     self._id_launch_piece_letter)
+                    self.designation.rstrip()
                 except (ValueError):
                     if(self.strict):
                         self.tle_good = False
