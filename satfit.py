@@ -9,10 +9,6 @@ if sys.version_info[0] != 3 or sys.version_info[1] < 6:
     print("This script requires Python version 3.6")
     sys.exit(1)
 
-import cProfile, pstats, io         # Performance profiling
-from pstats import SortKey
-pr = cProfile.Profile(timeunit=0.001)
-
 import configparser                 # config file parsing
 import argparse                     # command line parsing
 import os
@@ -2015,15 +2011,8 @@ def accept_command(db, sat, rd, ll, odata, sum, uu, iod_line):
 
         # Visible functions
         elif (cmd == "S"):  # Step
-            pr.enable()
             sat = step(sat, rd, ll, odata, sum, uu, "S")
-            pr.disable()
             print_el(sat)       # print new elements
-            s = io.StringIO()
-            sortby = SortKey.CUMULATIVE
-            ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-            ps.print_stats()
-            print(s.getvalue())
 
         elif (cmd == "Z"):
             sat = step(sat, rd, ll, odata, sum, uu, "Z")
