@@ -752,12 +752,13 @@ def format_test_uk(line=False):
 	else:
 		return False
 
-# Previous version for revert if necessary
-#rde_format_re = re.compile('\d{4}\s\d{4}\s(?=\d.\d*[ ]*)[\d. ]{4}\d\s\d{3}[0-6]\n(^\d{2}\n(^\d{7}\s\d{6}.\d{2}\s\d{6}[-+ ]\d{6}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\d.\d)[- \d.]{4}.*\n){2,}){1,}999', re.MULTILINE) # pylint: disable=anomalous-backslash-in-string
+# Previous version (currently in use due to https://github.com/consensys-space/trusat-orbit/issues/5) for revert if necessary
+rde_format_re = re.compile('\d{4}\s\d{4}\s(?=\d.\d*[ ]*)[\d. ]{4}\d\s\d{3}[0-6]\n(^\d{2}\n(^\d{7}\s\d{6}.\d{2}\s\d{6}[-+ ]\d{6}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\d.\d)[- \d.]{4}.*\n){2,}){1,}999', re.MULTILINE) # pylint: disable=anomalous-backslash-in-string
 
+# The following regex creates stalling-conditions on bulk import ref: https://github.com/consensys-space/trusat-orbit/issues/5
 # The following detects a complete RDE record block
 # https://regex101.com/r/rJRnoM/1
-new_rde_format_re = re.compile(r"""
+new_rde_format_re_verbose = re.compile(r"""
 \d{4}\s					 # Observing site number (4 digits)
 \d{4}\s					 # UTC Year and Month of Observation, in YYMM format
 (?=\d.\d*?\s*?)[\d. ]{3} # Time Accuracy, in seconds. Format is T.t
@@ -783,6 +784,9 @@ new_rde_format_re = re.compile(r"""
 999						 # RDE record ends with 999
 """,flags=re.MULTILINE|re.VERBOSE) # Need to OR flags to use multiple options
 
+# With all extraneous white space removed, as to avoid the OR'ed flags in new_rde_format_re_verbose
+new_rde_format_re_compact = re.compile(r"\d{4}\s\d{4}\s(?=\d.\d*?\s*?)[\d. ]{3}[1-3][1]\s\d{3}[0-6]\n(?:^\d{2}.*\n(?:^\d{7}\s\d{6}.\d{2}\s\d{6}[-+ ]\d{6}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\s?\d.*?\d*?)[- \d.]{3}[SIRFXE ].*\n){1,}){1,}999",re.MULTILINE)
+
 # The following detects a valid data line within a RDE record block
 # https://regex101.com/r/MDKDE6/2
 new_rde_data_line_re = re.compile(r"""
@@ -796,6 +800,8 @@ new_rde_data_line_re = re.compile(r"""
   [SIRFXE ].*$ 				 # Optical behavior code
 """,re.VERBOSE)
 rde_data_line_re = re.compile('\d{7}\s\d{6}.\d{2}\s\d{6}[-+ ]\d{6}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\d.\d)[- \d.]{4}')
+
+
 def format_test_rde(block=False):
 	match = new_rde_format_re.search(block)
 	if match:
@@ -1159,7 +1165,7 @@ def parse_rde_record(block=False):
 
 	Format documented at: http://www.satobs.org/position/RDEformat.html
 	"""
-	match = new_rde_format_re.search(block)
+	match = rde_format_re.search(block) # FIXME: Using older version per https://github.com/consensys-space/trusat-orbit/issues/5
 	IODentryList = []
 	rde_count = 0
 	earliest_time = datetime(1957,10,4,19,28,34,0)
