@@ -338,6 +338,8 @@ class TruSatellite(object):
         self.line0     = line0
         self.line1     = line1
         self.line2     = line2
+        self.tle_file_fingerprint = tle_file_fingerprint
+        self._tle_source_filename = tle_source_filename
         self.strict    = strict
         self.checksum  = checksum
 
@@ -380,8 +382,6 @@ class TruSatellite(object):
         self.epoch_string = None                            # Used for SQL INSERT, as it can't take a python datetime directly
         self.launch_piece_number = None
         self.tle_fingerprint = None                         # Created on import by DB
-        self._tle_file_fingerprint = tle_file_fingerprint   # Created on import by DB
-        self._tle_source_filename = tle_source_filename
         self.analyst_object = None
         self.tle_good = None
 
@@ -704,14 +704,15 @@ class TLEFile(object):
             self.parse_tles()
 
 
+    # FIXME: This can probably be eliminated in favor of general fingerprint_file()
     def fingerprint_file(self):
         """Open, read file and calculate MD5 on its contents"""
         with open(self.tle_file,'rb') as fd:
             # read contents of the file
             _file_data = fd.read()    
             # pipe contents of the file through
-            self.file_fingerprint = md5(_file_data).hexdigest()
-        return self.file_fingerprint
+            self.tle_file_fingerprint = md5(_file_data).hexdigest()
+        return self.tle_file_fingerprint
 
 
     def load_tles(self):
@@ -729,7 +730,7 @@ class TLEFile(object):
                 name = _l0.rstrip()
             return(name, _l1.rstrip(), _l2.rstrip())
 
-        if not (self.tle_file_fingerprint):
+        if (self.tle_file_fingerprint is None):
             self.fingerprint_file()
 
         l0 = l1 = ""
