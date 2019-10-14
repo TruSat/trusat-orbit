@@ -16,6 +16,9 @@ from datetime import date, timedelta, datetime
 from time import time                         # For performance timing
 from math import (fabs, radians, sin, cos, pi, sqrt, fmod, acos, asin, atan, tan, degrees, modf)    # Fast/precise math functions                      
 import numpy as np
+# Optimization: cache a method call instead of calling it on the object
+mag = np.linalg.norm
+
 import logging
 import string
 import copy
@@ -448,26 +451,26 @@ class Locate(object):
 def write_tle(file):
     pass
 
-def mag(v):
-    """ Computes the magnitude of a vector ||v|| 
+# def mag(v):
+#     """ Computes the magnitude of a vector ||v|| 
 
-    Renamed from norm(v) in original Scott Campbell code
-    to better correspond to function names in SGP4 code.
-    """
-    # mag = np.sqrt(np.dot(v, v))
-    mag = np.linalg.norm(v)
-    return mag
+#     Renamed from norm(v) in original Scott Campbell code
+#     to better correspond to function names in SGP4 code.
+#     """
+#     # mag = np.sqrt(np.dot(v, v))
+#     mag = np.linalg.norm(v)
+#     return mag
 
 def unit_vector(v):
     """ Returns the unit vector of the vector.  """
-    # u = v / mag(v)
-    u = v / np.linalg.norm(v)
+    u = v / mag(v)
     return u
+
 
 def delta_t(sat,t):
     tsince = (t - sat.jdsatepoch) * 1440.0 # time since epoch in minutes
 
-    (rr, vv) = sgp4(sat,tsince,sat.whichconst) 
+    (rr, vv) = sgp4(sat,tsince) 
 
     sat.rr_km = rr
     sat.vv_kmpersec = vv
@@ -476,6 +479,7 @@ def delta_t(sat,t):
     sat.vv = np.asarray(vv) / (sat.radiusearthkm / 60.0)  # In Earth radii / min - seriously!
 
     return sat
+
 
 def delta_el(sat, xincl=False, xnodeo=False,   eo=False, omegao=False, xmo=False,      xno=False,   bsr=False, 
                   inclo=False,  nodeo=False, ecco=False,  argpo=False,  mo=False, no_kozai=False,
@@ -858,7 +862,7 @@ def longitude(sat):
 
     ma = sat.mo
     ec = sat.ecco
-    ww = degrees(sat.argpo)
+    ww = sat.argpo / de2ra
 
     e = ma
     ek = 0
@@ -870,7 +874,7 @@ def longitude(sat):
     theta = acose(theta)
     if (e > pi):
         theta = 2 * pi - theta
-    uu = ww + degrees(theta)
+    uu = ww + theta / de2ra
     return uu
 
 
@@ -942,7 +946,7 @@ def find_rms(satx, rd, ll, odata):
     nobs = rd.shape[0] # Using this instead of len, as it might be better for Cython
     zum = 0
     # TODO look at using vectorized tsince code at https://github.com/brandon-rhodes/python-sgp4/pull/33
-    for j in range(rd.shape[0]):
+    for j in range(nobs):
         # advance satellite position
         satx = delta_t(satx,odata[j][0])
 
@@ -1540,17 +1544,17 @@ def anomaly_search(sat, rd, ll, odata, sum):
 
     step = 0.1
     # mk = ma # FIXME global
-    mk = degrees(sat.mo)
+    mk = sat.mo / de2ra
     # sum = find_rms(sat, rd, ll, odata) # PRobably not needed
 
     max = 1 # CPP do loop evaluates while at the end
     min = 0
-    while(fabs(max - min) > 1e-5):
+    while (fabs(max - min) > 1e-5):
         min = mk
         max = mk
 
         # nsum loop - until rms doesn't decrease since last loop
-        while(True):
+        while (True):
             min = mk - step
             sat = delta_el(sat, ma=min)
             # sat.delta_el(sat.jd, ii, om, ec, ww, min, nn, bstar) # FIXME python-SGP4
@@ -1562,7 +1566,7 @@ def anomaly_search(sat, rd, ll, odata, sum):
             break # Go forward to xsum loop
 
         # xsum loop - until rms doesn't decrease since last loop
-        while(True): 
+        while (True): 
             max = mk + step
             sat = delta_el(sat, ma=max)
             # sat.delta_el(sat.jd, ii, om, ec, ww, max, nn, bstar)    # FIXME python-SGP4
@@ -1576,6 +1580,7 @@ def anomaly_search(sat, rd, ll, odata, sum):
     sat = delta_el(sat, ma=mk)
     # ma = fmod(mk, 360)
     return sat # Contains the ma at the end of the loop
+
 
 def motion_search(sat, rd, ll, odata):
     """ mean motion box search, no limits """
@@ -1622,16 +1627,17 @@ def motion_search(sat, rd, ll, odata):
 def node_search(satx, rd, ll, odata, sum, imax, imin, omax, omin):
     """ partition search on node and inclination within set limits """
     global xi   # FIXME - Hold ii constant to user-specified value?  Gets set in incl()
+    xi_set = xi # Optimization, don't use globals in loops
 
-    ii = degrees(satx.inclo)
-    om = degrees(satx.nodeo)
+    ii = satx.inclo / de2ra
+    om = satx.nodeo / de2ra
 
     # satx = copy.deepcopy(sat)   # Working with the copy might not be necessary
     while((imax - imin) > 1e-5):
         istep = (imax - imin) / 20
         ostep = fabs(rtw(omax, omin) / 20)
 
-        if (xi): # FIXME: to have the effect of running the for and while loops once for the fixed imin value
+        if (xi_set): # FIXME: to have the effect of running the for and while loops once for the fixed imin value
             imin  = ii
             imax  = ii + 1e-6
             istep = 10*imin
@@ -1683,12 +1689,12 @@ def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
 
     # Grab the values we're searching for in the loop, in case we don't find a new optimal
     ec  = sat.ecco
-    ww  = degrees(sat.argpo)
-    ma  = degrees(sat.mo)
+    ww  = sat.argpo/de2ra
+    ma  = sat.mo/de2ra
 
     if (sat.ecco > 0.1):
-        wmax = degrees(sat.argpo) + 0.1
-        wmin = degrees(sat.argpo) - 0.1
+        wmax = sat.argpo/de2ra + 0.1
+        wmin = sat.argpo/de2ra - 0.1
         emax = sat.ecco * 1.01
         emin = sat.ecco * 0.99
 
@@ -1700,9 +1706,9 @@ def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
         wstep = (wmax - wmin) / 20
         for wk in np.arange(wmin, wmax, wstep):
             if (xw):
-                wmin  = degrees(sat.argpo)
-                wmax  = degrees(sat.argpo)
-                wk    = degrees(sat.argpo)
+                wmin  = sat.argpo/de2ra
+                wmax  = sat.argpo/de2ra
+                wk    = sat.argpo/de2ra
                 wstep = 0
             theta = radians(uu - wk)    # FIXME global (uu)
             for ek in np.arange(emin, emax, estep):
@@ -1741,8 +1747,8 @@ def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
         # Could save a call here by checking for the existence of the variables, but what's one more time?
         sat = delta_el(sat, ec=ec, ww=ww, ma=ma)
 
-        wmax = degrees(sat.argpo) + wstep
-        wmin = degrees(sat.argpo) - wstep
+        wmax = sat.argpo/de2ra + wstep
+        wmin = sat.argpo/de2ra - wstep
         emax = sat.ecco + estep
         emin = sat.ecco - estep
                
@@ -2209,12 +2215,12 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
 
     emax = sat.ecco * 1.1
     emin = sat.ecco * 0.9
-    wmax = degrees(sat.argpo) + 2
-    wmin = degrees(sat.argpo) - 2
-    imax = degrees(sat.inclo) + 2
-    imin = degrees(sat.inclo) - 2
-    omax = degrees(sat.nodeo) + 2
-    omin = degrees(sat.nodeo) - 2
+    wmax = sat.argpo / de2ra + 2
+    wmin = sat.argpo / de2ra - 2
+    imax = sat.inclo / de2ra + 2
+    imin = sat.inclo / de2ra - 2
+    omax = sat.nodeo / de2ra + 2
+    omin = sat.nodeo / de2ra - 2
 
     # We're not currently capturing input while step() is a loop, so supress this note
     # print("\nPress Q to Quit    :\n")
@@ -2255,12 +2261,12 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
 
         emax = sat.ecco * 1.01
         emin = sat.ecco * 0.99
-        wmax = degrees(sat.argpo) + 0.5
-        wmin = degrees(sat.argpo) - 0.5
-        imax = degrees(sat.inclo) + 0.5
-        imin = degrees(sat.inclo) - 0.5
-        omax = degrees(sat.nodeo) + 0.5
-        omin = degrees(sat.nodeo) - 0.5
+        wmax = sat.argpo / de2ra + 0.5
+        wmin = sat.argpo / de2ra - 0.5
+        imax = sat.inclo / de2ra + 0.5
+        imin = sat.inclo / de2ra - 0.5
+        omax = sat.nodeo / de2ra + 0.5
+        omin = sat.nodeo / de2ra - 0.5
 
         # Shouldn't need this
         sum = find_rms(sat, rd, ll, odata)
