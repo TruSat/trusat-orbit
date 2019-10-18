@@ -59,27 +59,6 @@ nocon = twopi/1440.0
     # - FILEOP getepoch (output epoch of each elset) only an .exe
 """
 
-def myjday(yy, mm, dd, hr, mn, ss):
-    """ Calculate Julian date from calendar date/time
-    
-    The following is from Scott Campbell code, which appears to agree with astropy results
-    python/Vallado SGP4 code gives a slightly different result """
-
-    # Make copies of the values we're modifying
-    yr = copy.copy(yy)
-    mon = copy.copy(mm)
-    
-    # There's some madness going on before.  Part depends on integer math, part does not.
-    # It current returns the same result as the CPP code
-    if( mm < 3 ):
-      yr = yy - 1
-      mon = mm + 12
-    c = yr // 100
-    jd = ( int(365.25 * (yr + 4716)) + int(30.6001 * (mon + 1))
-         + dd + 2 - c + int(c // 4) - 1524.5 )
-    jd = jd + (hr + (mn + ss / 60) / 60) / 24
-    return jd
-
 
 def extract_zip_to_memory(input_zip):
     """Return contents of zip file(s) in memory"""
