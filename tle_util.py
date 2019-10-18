@@ -23,6 +23,7 @@ from zipfile import ZipFile
 from urllib.request import urlopen
 from datetime import date, timedelta, datetime
 from math import degrees, pi, pow, radians, sqrt  # Fast/precise math functions
+from sgp4.ext import jday
 
 import logging
 log = logging.getLogger(__name__)
@@ -31,8 +32,6 @@ log = logging.getLogger(__name__)
 from getpass import getpass
 
 from spacetrack import SpaceTrackClient
-from skyfield.api import load
-#from sgp4.ext import jday # Use our own for now
 
 # Global variables
 twopi = 2*pi
@@ -290,7 +289,7 @@ def delta_TLE(TLE1, TLE2):
     return TLE
 
 
-# Note: Can't call it "Satellite" as that appears to interfere with Satellite class in python-skyfield
+# Note: Can't call it "Satellite" as that appears to interfere with Satellite class in python-sgp4
 class TruSatellite(object):
     """ Class for TLE data objects and methods
 
@@ -400,7 +399,7 @@ class TruSatellite(object):
         microseconds = int(self.epoch_datetime.strftime('%f'))
         sec_with_microseconds = second + microseconds/1.0E6
 
-        self.jdsatepoch = myjday(year, month, day, hour, minute, sec_with_microseconds)
+        self.jdsatepoch = jday(year, month, day, hour, minute, sec_with_microseconds)
         self.jdSGP4epoch = self.jdsatepoch - 2433281.5
 
         self.inclination_radians  = radians(self.inclination_degrees)
@@ -495,10 +494,10 @@ class TruSatellite(object):
                         self.tle_good = False
 
                 try:
-                    self.designation = "{:4d}-{:>03d}{:<3s}".format(self._id_launch_year,
+                    designation = "{:4d}-{:>03d}{:<3s}".format(self._id_launch_year,
                                                                     self._id_launch_num,
                                                                     self._id_launch_piece_letter)
-                    self.designation.rstrip()
+                    self.designation = designation.rstrip()
                 except (ValueError):
                     if(self.strict):
                         self.tle_good = False
