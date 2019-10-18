@@ -37,6 +37,9 @@ class Tests(TestCase):
         t1 = Date(jd)
 
         self.assertEqual(t1.jd,jd,"t1.jd failed")
+        
+
+        isodatestring = '2007-01-14T13:18:59.904002'
 
 
 

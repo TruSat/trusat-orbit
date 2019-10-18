@@ -4,7 +4,7 @@ from __future__ import print_function
 from __future__ import division         # Eliminate need for decimals on whole values
 import sys
 
-# As of 28 July 2019, python3.6 is the default "python3" in apt-get install python3
+# As of 28 July 2019, python3.6 is the default "python3" in apt-get install python3 on Ubuntu
 if sys.version_info[0] != 3 or sys.version_info[1] < 6:
     print("This script requires Python version 3.6")
     sys.exit(1)
@@ -12,7 +12,7 @@ if sys.version_info[0] != 3 or sys.version_info[1] < 6:
 import configparser                 # config file parsing
 import argparse                     # command line parsing
 import os
-from datetime import date, timedelta, datetime
+from datetime import timedelta, datetime
 from time import time                         # For performance timing
 from math import (fabs, radians, sin, cos, pi, sqrt, fmod, acos, asin, atan, tan, degrees, modf)    # Fast/precise math functions                      
 import numpy as np
@@ -29,29 +29,22 @@ log = logging.getLogger(__name__)
 
 from spacetrack import SpaceTrackClient
 
-# These are necessary until Brandon Rhodes approves pull requests
+# python SGP4 from git+https://github.com/interplanetarychris/python-sgp4@cython-7-dec-15-vallado
+# Until the following pull request is approved
 # https://github.com/brandon-rhodes/python-sgp4/pull/35
-# sys.path.insert(1, '../python-sgp4')
-# https://github.com/skyfielders/python-skyfield/pull/276
-# sys.path.insert(2, '/Users/chris/Dropbox/code/MVP/python-skyfield') # unused
-
-# from skyfield.iokit import Loader, download, parse_tle
-# from skyfield import sgp4lib
 
 try:
     from sgp4.cpropagation import sgp4, sgp4init
 except ImportError as e:
     print(e)
     from sgp4.propagation import sgp4, sgp4init
-from sgp4.ext import invjday, days2mdhms
-from sgp4.io import twoline2rv
+from sgp4.ext import jday, invjday
 from sgp4.model import Satellite
 from sgp4 import earth_gravity
 
-
 import iod 
 
-from tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetime_from_tle_fmt, assumed_decimal_point, checksum_tle_line, myjday, TruSatellite, make_tle_from_SGP4_satrec
+from tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetime_from_tle_fmt, assumed_decimal_point, checksum_tle_line, TruSatellite, make_tle_from_SGP4_satrec
 
 # The following 5 lines are necessary until our modules are public
 import inspect
@@ -330,7 +323,7 @@ class Date(object):
                 self.tle = self.time
                 self.time = datetime_from_tle_fmt(self.tle)
                 self.timevars_from_datetime()
-                self.jd = myjday(self.yy, self.mm, self.dd, self.hr, self.mm, self.ss)
+                self.jd = jday(self.yy, self.mm, self.dd, self.hr, self.mm, self.ss)
                 self.sidereal()
             else:                   # this date is julian
                 self.jd = self.time
@@ -354,7 +347,7 @@ class Date(object):
 
         # Fill out rest of internal variables
         if (not self.jd):
-            self.jd = myjday(self.yy, self.mm, self.dd, self.hr, self.mn, self.ss)
+            self.jd = jday(self.yy, self.mm, self.dd, self.hr, self.mn, self.ss)
             self.calcmjd()
 
         if (not self.doy):
@@ -551,7 +544,7 @@ def delta_el(sat, xincl=False, xnodeo=False,   eo=False, omegao=False, xmo=False
         microseconds = int(sat.epoch_datetime.strftime('%f'))
         sec_with_microseconds = second + microseconds/1.0E6
 
-        sat.jdsatepoch = myjday(year, month, day, hour, minute, sec_with_microseconds)
+        sat.jdsatepoch = jday(year, month, day, hour, minute, sec_with_microseconds)
         sat.jdSGP4epoch = sat.jdsatepoch - 2433281.5
        
     sgp4init(sat.whichconst, sat.operationmode, sat.satnum, sat.jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot, sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
@@ -692,7 +685,7 @@ def read_obssf(IOD_Records, Stations=None):
         microseconds = int(epoch_datetime.strftime('%f'))
         sec_with_microseconds = second + microseconds/1.0E6
 
-        # self.jdsatepoch = myjday(year, month, day, hour, minute, sec_with_microseconds)
+        # self.jdsatepoch = jday(year, month, day, hour, minute, sec_with_microseconds)
         t1 = Date(year=year, month=month, day=day, hour=hour, min=minute, sec=sec_with_microseconds)
 
         # Skip the skyfield stuff while debugging against satfit.cpp
