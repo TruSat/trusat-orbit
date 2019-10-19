@@ -656,6 +656,7 @@ class TLEFile(object):
     """TLEFile: Class for TLE file operations
     
         Returns an Dict of TruSatellite objects with NORAD id as KEY
+        Note: This method of key-association will only store the first record for each NORAD-id it finds in the file.
     """
 
     def __init__(self, tle_file, strict=True, parse=True):
