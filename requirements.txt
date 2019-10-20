@@ -1,0 +1,4 @@
+numba
+scipy
+spacetrack
+git+https://github.com/interplanetarychris/python-sgp4@cython-7-dec-15-vallado
