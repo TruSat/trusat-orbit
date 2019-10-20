@@ -5,13 +5,13 @@ This repo supports the analyses of [IOD/RDE/UK positional formatting formats](ht
 Currently, its orbit determination code is based on a Python port of [Scott Campbell's C++ satfit code base]( https://github.com/interplanetarychris/scottcampbell-satfit). After initial prototyping, it is an aim of this repo to include OREKit and related tools for more advanced processing of orbit-related calculations.
 
 ## Contents
-* iod.py - Utilities for importing, validating, and operating on IOD/RDE/UK positional formatting formats 
-* tle_util.py - Utilities to import, export, validate and operate on Two-Line Element sets
-* satfit.py - Suite of utilities based on and extending [Scott Campbell's C++ satfit code base]( https://github.com/interplanetarychris/scottcampbell-satfit) for reading visual observations and updating TLEs
-** satid.py - Search TLE catalog for possible match to an UNIDentified satellite TLE
-** elfind.py - Generate a provisional TLE from 2-3 IOD records
+* **iod.py** - Utilities for importing, validating, and operating on IOD/RDE/UK positional formatting formats 
+* **tle_util.py** - Utilities to import, export, validate and operate on Two-Line Element sets
+* **satfit.py** - Suite of utilities based on and extending [Scott Campbell's C++ satfit code base]( https://github.com/interplanetarychris/scottcampbell-satfit) for reading visual observations and updating TLEs
+  * **satid.py** - Search TLE catalog for possible match to an UNIDentified satellite TLE
+  * **elfind.py** - Generate a provisional TLE from 2-3 IOD records
 
-### Tests
+### Tests - Unit tests for the above
 * tests_iod.py 
 * tests_satfit.py
 * tests_TLE.py
