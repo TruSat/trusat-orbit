@@ -1,4 +1,10 @@
 #!/usr/bin/env python
+"""  Fit a TLE prediction to a reference TLE + new IOD observations
+
+ Suite of utilities based on and extending Scott Campbell's C++ satfit code base
+ https://github.com/interplanetarychris/scottcampbell-satfit) 
+ for reading visual observations and updating TLEs 
+ """
 
 from __future__ import print_function
 from __future__ import division         # Eliminate need for decimals on whole values
@@ -16,8 +22,6 @@ from datetime import timedelta, datetime
 from time import time                         # For performance timing
 from math import (fabs, radians, sin, cos, pi, sqrt, fmod, acos, asin, atan, tan, degrees, modf)    # Fast/precise math functions                      
 import numpy as np
-# Optimization: cache a method call instead of calling it on the object
-mag = np.linalg.norm
 
 import logging
 import string
@@ -64,7 +68,7 @@ de2ra = pi/180.0
 db = None
 startDate = False
 
-# TODO: Make a class of these?
+# FIXME: Legacy globals which are being worked out of the code
 srch = "W"      # Search scope
 epoch = None    # epoch of elements in tle format
 ii = None   # inclination, degrees
@@ -85,7 +89,7 @@ ll = None
 rd = None
 iod_line = [] # Observation lines
 
-# TODO: Figure out what these flags mean
+# TODO: Document the meaning of these flags
 # int
 #    xi = 0, xe = 0, xw = 0, xn = 0;   // flags
 xe = False
@@ -117,23 +121,11 @@ xsum = None
 # FILE *fp, *fpo;
 
 # TODO: Define what these variables are for
-# // declare variables for search and history options
-# double e, ik, ok, ek, wk, mk, nk, bk, theta, minsum, ra, dc;
-
-# double
-#   astep,   amin,    amax,
-#   istep,   imin,    imax,
-#   ostep,   omin,    omax,
-#   estep,   emin,    emax,    esize,
-#   wstep,   wmin,    wmax,    wsize,
-#   nstep,   nmin,    nmax,    nsize,
-#   bstep,   bmin,    bmax,
-#            mmax,    mmin;
-
 estep = None
 wstep = None
 nstep = None
 
+## Variable / Function reference from original Scott Campbell C++ code
 # class Satellite(object):
 #     """
 #     /*************************** Class Satellite **********************************
@@ -444,6 +436,9 @@ class Locate(object):
 def write_tle(file):
     pass
 
+# Optimization: cache a method call instead of calling it on the object
+mag = np.linalg.norm
+
 # def mag(v):
 #     """ Computes the magnitude of a vector ||v|| 
 
@@ -478,7 +473,7 @@ def delta_el(sat, xincl=False, xnodeo=False,   eo=False, omegao=False, xmo=False
                   inclo=False,  nodeo=False, ecco=False,  argpo=False,  mo=False, no_kozai=False,
                      ii=False,     om=False,   ec=False,     ww=False,  ma=False,       nn=False, bstar=False,  
             jdsatepoch=False, jdSGP4epoch=False, epoch_datetime=False):
-    """ delta_el - Reinitialize SGP4 satellite object with changed Keplerian elements
+    """ delta_el - Reinitialize SGP4 satellite object vi sgp4init() with changed Keplerian elements and/or epoch time
     
     Units can be passed in via radians or degrees, as is the convention for variable names
     """
@@ -561,6 +556,7 @@ def jday_to_datetime(jd):
     return jday_datetime
 
 
+# TODO: move to C-accelerated module
 def posradang(a):
     if a < 0:
         return a + twopi
@@ -569,7 +565,9 @@ def posradang(a):
     else:
         return a
 
-def acose(x):
+
+# TODO: move to C-accelerated module
+# def acose(x):
     if ( x >= 1):
         rval = 0
     elif ( x <= -1):
@@ -842,6 +840,7 @@ def print_el(sat, deg=False, quiet=False):
     return(newTLE.line0, newTLE.line1, newTLE.line2)
 
 
+# TODO: move to C-accelerated module
 def longitude(sat):
     """Calculate true longitude from mean anomaly and argument of perigee
     Inputs: 
@@ -923,7 +922,9 @@ def sort(iod_line, odata, ll, rd):
             unsorted = 1 # Set the flag to sort again.
     return [iod_line, odata, ll, rd]
 
+
 # TODO: This function (and those it calls) will benefit the best from accelerating
+# TODO: move to C-accelerated module
 def find_rms(satx, rd, ll, odata):
     """ find rms of observations against propagated TLE position
 
@@ -938,18 +939,16 @@ def find_rms(satx, rd, ll, odata):
     """
     nobs = rd.shape[0] # Using this instead of len, as it might be better for Cython
     zum = 0
-    # TODO look at using vectorized tsince code at https://github.com/brandon-rhodes/python-sgp4/pull/33
+    # TODO Improve performance of vectorized version in branch: 
+    # https://github.com/interplanetarychris/python-sgp4/tree/7-dec-15-vallado-tsince-vectorize
     for j in range(nobs):
         # advance satellite position
         satx = delta_t(satx,odata[j][0])
 
         # predicted topocentric coordinates (sat xyz - observer xyz)
-        # delr = satx.rr - rd[j] # This was vmadd -1
-        # nrr = mag(delr)       # range
-
-        # convert to unit vector
-        # delr = delr/nrr
+        # converted to unit vector
         delr = unit_vector(satx.rr - rd[j])
+
         # topocentric position error in degrees
         Perr = ( acose( np.dot(delr, ll[j]) ) )/de2ra
 
@@ -957,8 +956,10 @@ def find_rms(satx, rd, ll, odata):
         zum += Perr*Perr
     return sqrt(zum / nobs)
 
+
 # Version of print_fit intended to be non-interactive and store fit to variables
 # New TruSat development in this version, to preserve original functionality of print_fit
+# TODO: move to C-accelerated module
 def calc_fit(sat, rd, ll, odata, last_rms, TLE_process):
     nobs = len(odata)
     if (nobs == 0):
@@ -1068,17 +1069,6 @@ def calc_fit(sat, rd, ll, odata, last_rms, TLE_process):
         Perr = degrees(Perr)
         sum += Perr*Perr
 
-        # # Format time string
-        # # YYday HHMM:SSsss
-        # tsince = (odata[j][0] - sat.jdsatepoch) * 1440.0 # time since epoch in minutes # TODO: Clean up this calculation
-        # obstime = sat.epoch + timedelta(minutes=tsince)
-        # timestring = obstime.strftime('%y%j %H%M:%S')
-        # SSS = obstime.strftime('%f')
-        # SSS = int(1000*(int(SSS)/1E6))
-        # fit_string = "({:2d}) {:04d}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}".format(
-        #     j + 1, int(odata[j][3]), timestring, SSS, az, el, asp, xtrk, delt, Perr)
-        # print(fit_string)
-
         obs_id = int(odata[j][4])   # FIXME Need to convert to int from numpy float. Probably a better way to store all this.
         TLE_process.update(
             { obs_id : 
@@ -1093,12 +1083,10 @@ def calc_fit(sat, rd, ll, odata, last_rms, TLE_process):
         )
 
     rms = sqrt(sum / nobs)
-    # delta_rms = rms - last_rms
-    # print("\nrms{:12.5f} ({:.5f})".format(rms, delta_rms))
     return rms, TLE_process
 
 
-def print_fit(sat, rd, ll, odata, last_rms): # WORKS
+def print_fit(sat, rd, ll, odata, last_rms):
     nrr = 0
     nvv = 0
     Perr = 0
@@ -1276,15 +1264,7 @@ def print_calc_fit(sat, rd, ll, odata, last_rms, TLE_process):
 
 # ////////////////// FUNCTIONS //////////////////////////////////////////////////
 
-def asym(a1, a2, a3):
-    """ asymptotic extrapolation """
-    if (fabs(a1 - a2) < 1.0e-5):
-        b = 0.0
-    else:
-        b = (a2 - a3) / (a1 - a2)
-    return (b * a2 - a3) / (b - 1.0)
-
-
+# TODO: move to C-accelerated module
 def rtw(ao, ac):
     """ round the world """
     if (fabs(ao - ac) > 180):
@@ -1295,6 +1275,7 @@ def rtw(ao, ac):
     return ao - ac
 
 
+# TODO: move to C-accelerated module
 def ww2ma(wx):
     """ find mean anomaly from true longitude and perigee """
     # FIXME uses uu, ec globals
@@ -1305,6 +1286,8 @@ def ww2ma(wx):
     ma = e - ec * sin(e)
     return degrees(ma)
 
+
+# TODO: move to C-accelerated module
 def zrll(satx, rd):
     """ Calculates predicted direction angles, right ascension(ra) and
     declination(dc), of the line of sight vector, rll, in equatorial coordinates
@@ -1329,6 +1312,7 @@ def zrll(satx, rd):
     return (ra, dc)
 
 
+# TODO: move to C-accelerated module
 def diff_el(sat, rd, ll, odata, sum):
     """ differential correction of elements
 
@@ -1528,6 +1512,8 @@ def diff_el(sat, rd, ll, odata, sum):
     # ma = degrees(sat.xmo)
     # nn = sat.xno/nocon
 
+
+# TODO: move to C-accelerated module
 def anomaly_search(sat, rd, ll, odata, sum):
     """ mean anomaly box search, no limits """
     # global ma   # Not supposed to need these unless we're assigning, but alas...
@@ -1575,6 +1561,7 @@ def anomaly_search(sat, rd, ll, odata, sum):
     return sat # Contains the ma at the end of the loop
 
 
+# TODO: move to C-accelerated module
 def motion_search(sat, rd, ll, odata):
     """ mean motion box search, no limits """
     # nk = nn
@@ -1617,6 +1604,8 @@ def motion_search(sat, rd, ll, odata):
     nn = nk
     return sat # nn (mean motion) is incorporated in the last update for the sat variable.
 
+
+# TODO: move to C-accelerated module
 def node_search(satx, rd, ll, odata, sum, imax, imin, omax, omin):
     """ partition search on node and inclination within set limits """
     global xi   # FIXME - Hold ii constant to user-specified value?  Gets set in incl()
@@ -1657,6 +1646,7 @@ def node_search(satx, rd, ll, odata, sum, imax, imin, omax, omin):
     return satx
 
 
+# TODO: move to C-accelerated module
 def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
     """ partition search on perigee and eccentricity 
     
@@ -1798,7 +1788,7 @@ def align(sat, rd, ll, odata):
 
         # TODO not sure where first gets set
         if (first):
-            first = 0;
+            first = 0
             ma = ma - 0.75*delt
         else:
             ma = ma - delt/5.0
@@ -2184,28 +2174,19 @@ def discover(sat, rd, ll, odata):       # partition search
     srch = 'Z' # FIXME, this is probably a global
     return sat
 
-def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search within limits set below
 
-    global srch
+# TODO: move to C-accelerated module
+def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search within limits set below
+    global srch # FIXME: Get rid of this global
 
     nobs = len(odata)
     last_rms = sum
     # update mean_anomaly
-    # anomaly_search: 0.015267133712768555
     sat = anomaly_search(sat, rd, ll, odata, sum)
 
     # sat = delta_el(sat, xmo=radians(ma)) # Not needed, as latest ma returned from above
     # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
  
-    # emax = ec * 1.1
-    # emin = ec * 0.9
-    # wmax = ww + 2
-    # wmin = ww - 2
-    # imax = ii + 2
-    # imin = ii - 2
-    # omax = om + 2
-    # omin = om - 2
-
     emax = sat.ecco * 1.1
     emin = sat.ecco * 0.9
     wmax = sat.argpo / de2ra + 2
@@ -2240,17 +2221,6 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
             # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
             de_stop = time()
             DE = de_stop - de_start
-
-        # set new limits
-        # FIXME: Figure out globals
-        # emax = 1.01 * ec
-        # emin = 0.99 * ec
-        # wmax = ww + 0.5
-        # wmin = ww - 0.5
-        # imax = ii + 0.5
-        # imin = ii - 0.5
-        # omax = om + 0.5
-        # omin = om - 0.5
 
         emax = sat.ecco * 1.01
         emin = sat.ecco * 0.99
@@ -2835,13 +2805,13 @@ def move_epoch_to_previous_perigee(sat):
         sat = delta_t(sat,t1_jd)
         sat.mm = posradang(sat.mm) # Use instantaneous mean element FIXME: cython SGP4 allows these to be negative sign
     sat = delta_el(sat,inclo=sat.im, nodeo=sat.Om, ecco=sat.em, argpo=sat.om, mo=sat.mm, no_kozai=sat.no_kozai, jdsatepoch=t1_jd)
-    return(sat)
+    return sat
 
 
 def move_epoch_to_jd(sat,t2_jd):
     sat = delta_t(sat,t2_jd)
     sat = delta_el(sat,inclo=sat.im, nodeo=sat.Om, ecco=sat.em, argpo=sat.om, mo=sat.mm, no_kozai=sat.no_kozai, jdsatepoch=t2_jd)
-    return(sat)
+    return sat
 
 
 def maneuver(sat, rd, ll, odata, sum, iod_line):
@@ -3108,7 +3078,7 @@ def write_el(db, sat, rd, ll, odata, sum, start_rms):
 
         print("\n(U)pdate (V)iew (A)ppend (O)riginal (R)estore", end='')
         if (db):
-            print("\nDATABASE: (I)nsert new TLE (L)oop insert (Q)uit", end='')
+            print("\nDATABASE: (I)nsert new TLE (L)oop insert ra(W) insert (Q)uit", end='')
         else:
             print(" (Q)uit")
 
@@ -3155,7 +3125,7 @@ def write_el(db, sat, rd, ll, odata, sum, start_rms):
                 for i in range(nobs): # FIXME More pythonic way
                     fp.write("{:s}".format(iod_line[i]))
         # Insert TLE and TLE_process results to database
-        elif (buf == 'I' or buf == 'L'):
+        elif (buf == 'I' or buf == 'L' or buf == 'W'):
             newTLE_process = {}
             (sum, newTLE_process) = calc_fit(sat, rd, ll, odata, sum, newTLE_process)
 
@@ -3168,6 +3138,8 @@ def write_el(db, sat, rd, ll, odata, sum, start_rms):
                     object_search(db, startDate=startDate, object=newTLE.satellite_number)
                 elif (buf == 'L'):
                     object_process(db, startDate=startDate, object=newTLE.satellite_number)
+                elif (buf == 'W'):
+                    raw_search(db)
             else:
                 log.error("DB Insert failed.")
         # QUIT write_el
@@ -3230,6 +3202,7 @@ def time_func(sat, rd, ll, odata, sum):
     #     print("\nrms{:12.5f}".format(sum))
 
     #     uu = longitude(degrees(sat.mo), degrees(sat.argpo), sat.ecco)
+
 
 def initsat(TLE,gravconst="wgs72"):
     """Initialize SGP4 Satellte() from raw variables
@@ -3333,6 +3306,8 @@ def initsat(TLE,gravconst="wgs72"):
     else:
         return satrec
 
+
+# FIXME: Probably no longer needed with current implementation of delta_el
 def re_initsat(satrecnew, new_ma, new_raan, new_jdepoch):
     satrec = copy.deepcopy(satrecnew)
 
@@ -3376,8 +3351,9 @@ def re_initsat(satrecnew, new_ma, new_raan, new_jdepoch):
         return satrec
 
 
-def iod_search(db=False):
+def raw_search(db=False):
     global iod_line #FIXME: get rid of this global
+    classification='U' # FIXME: Default to this unless overridden
 
     while(True):
         try:
@@ -3422,7 +3398,123 @@ def iod_search(db=False):
                 satnum = i.ObjectNumber
 
         try:
-            TLE = db.selectTLEEpochBeforeDate(IODs[0].obs_time, IODs[0].ObjectNumber)
+            try:
+                tle_id_inp = input("\nEnter ref TLE ID: ")
+                tle_id_inp = tle_id_inp.strip()
+                tle_id = int(tle_id_inp)
+            except:
+                log.warning("NO TLE found for id '{}' ".format(tle_id))
+                continue
+            TLE = db.selectTLEid(tle_id)
+            print("Found tle_id {} for reference:".format(TLE.tle_id))
+            print("{}".format(TLE.name))
+            print("{}".format(TLE.line1))
+            print("{}".format(TLE.line2))
+        except:
+            log.warning("NO TLE found for id '{}' ".format(tle_id))
+            continue
+
+        Stations = db.getStationDictforIODs(IODs)
+        if (not len(Stations)):
+            log.warning("NO Station data found for observations.")
+            continue
+        break
+
+
+    # // read all observations from input
+    # // Observed topocentric vectors for each observer position.
+    # // Equatorial coordinates.
+    # TODO: Audit this against everything done in read_obs starting on line 1585
+    # get line-of-sight vectors
+    # (odata, ll, rd) = read_obs(IOD_Records)
+    (odata, ll, rd, t1) = read_obssf(IODs, Stations) # Use the scott-campbell way while debugging against satfit.cpp
+
+    sat = initsat(TLE)
+    sat.thetag = t1.thetag  # FIXME: Find a different way to get this, or how its used in anomaly()
+    sat.parent_tle_id = TLE.tle_id
+
+    # Make a copy of original sat
+    save_sat = copy.deepcopy(sat)
+
+    # // maneuvering sat
+    satm = copy.deepcopy(sat)
+
+    # // calculate uu, degrees, for search
+    uu = longitude(sat)
+
+    # DB results already sorted, make sure the file ones are
+    if(not db):
+        [iod_line, odata, ll, rd] = sort(iod_line, odata, ll, rd)
+
+    nobs = len(IODs)
+    sum = find_rms(sat, rd, ll, odata) # Establish baseline rms for global
+    print("\n{} Observations Found".format(nobs))
+    print("\nStarting rms{:12.5f}".format(sum))
+
+    # print dates
+    # t2 = Date()
+    # print("\TLE   : {:d}".format(t2.doy))
+    # if(nobs > 0):
+    #     t3 = Date(time=(odata[nobs - 1][0]))
+    #     print("LAST OB : {:d}".format(t3.doy))
+    age = odata[nobs - 1][0] - sat.jdsatepoch
+    print("TLE Age from last OBS: {:.2f} days".format(age))    
+
+    # Accept a new command
+    accept_command(db, sat, rd, ll, odata, sum, uu, iod_line)
+
+
+def iod_search(db=False):
+    global iod_line #FIXME: get rid of this global
+    classification='U' # FIXME: Default to this unless overridden
+
+    while(True):
+        try:
+            iod_obs_inp = input("\nEnter 1 or more IOD Obs IDs: ")
+            iod_obs_inp = iod_obs_inp.strip()
+            iod_obs = iod_obs_inp.split(' ')
+        except:
+            pass
+
+        IOD_candidates = db.selectIODListat(iod_obs[0])
+        if (len(iod_obs)==1):
+            print("obs_id satnum STA  user              obs_time  RA   DEC")
+            for r in IOD_candidates:
+                print("{ID:7} {NUM:5} {STA:4} {USR} {TIME} ra:{RA:<8.4f} dec:{DEC:<8.4}".format(
+                    ID=r.obs_id, 
+                    NUM=r.ObjectNumber, 
+                    STA=r.Station, 
+                    USR=r.UserString, 
+                    TIME=r.obs_time.isoformat(),
+                    RA=r.RA,
+                    DEC=r.DEC)
+                )
+            continue
+        elif(len(iod_obs)==0):
+            print("No observations found for obs_id {}".format(iod_obs))
+            continue
+        else:
+            IODsq = db.selectIODlist(iod_obs)
+
+        IODs = []
+        iod_line = []
+        satnum = None
+        for i in IODsq:
+            if (satnum and satnum != i.ObjectNumber ):
+                # Send the user back to the sat selection list
+                log.error("You selected observations for multiple satellites.  Try again")
+                iod_obs = [iod_obs[0]]
+                continue
+            else:
+                IODs.append(i)
+                iod_line.append(i.iod_string)
+                satnum = i.ObjectNumber
+
+        try:
+            if (classification=='T'):
+                TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, satnum,classification=classification)    # FIXME: Probably want to call elfind in a rebuild case
+            else:
+                TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, satnum)    
             print("Using tle_id {} as reference:".format(TLE.tle_id))
             print("{}".format(TLE.name))
             print("{}".format(TLE.line1))
@@ -3480,6 +3572,7 @@ def iod_search(db=False):
     # Accept a new command
     accept_command(db, sat, rd, ll, odata, sum, uu, iod_line)
 
+
 def object_search(db=False,startDate=False,object=False):
     global iod_line #FIXME: get rid of this global
 
@@ -3501,6 +3594,9 @@ def object_search(db=False,startDate=False,object=False):
                 startDate = datetime(1957,10,4,19,28,34,0)
                 classification='U'
                 print("Processing since the beginning of time")
+        else:
+                # If we're entering the function with a start date, we've created a TTLE
+                classification='T'
 
         IOD_candidates = db.findObservationCluster(object,startDate=startDate,minObserverCount=1)
         if (len(IOD_candidates)==0):
@@ -3830,6 +3926,7 @@ def main(db=False):
     while(True):
         print("\nEnter command")
         print("Database: (I)OD search (O)bject search (L)atest (M)cCants TLE baseline q(U)eue")
+        print("          ra(W) search")
         print("(Q)uit")
 
         cmd = input(": ").strip()
@@ -3841,6 +3938,8 @@ def main(db=False):
             object_search(db)
         elif (cmd == "M"):  # McCants TLE baseline
             object_tle_test(db)
+        elif (cmd == "W"):  # Raw search
+            raw_search(db)
         elif (cmd == "L"):  # Latest observations
             pass
         elif (cmd == "U"):  # View the queue
