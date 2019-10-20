@@ -4,6 +4,14 @@ This repo supports the analyses of [IOD/RDE/UK positional formatting formats](ht
 
 Currently, its orbit determination code is based on a Python port of [Scott Campbell's C++ satfit code base]( https://github.com/interplanetarychris/scottcampbell-satfit). After initial prototyping, it is an aim of this repo to include OREKit and related tools for more advanced processing of orbit-related calculations.
 
+# Getting started with TruSat-orbit
+First, we recommend setting up a [python virtual environment](https://realpython.com/python-virtual-environments-a-primer/)
+```
+git clone https://github.com/consensys-space/trusat-orbit.git 
+pip install -r requirements.txt
+python satfit.py
+```
+
 ## Contents
 * **iod.py** - Utilities for importing, validating, and operating on IOD/RDE/UK positional formatting formats 
 * **tle_util.py** - Utilities to import, export, validate and operate on Two-Line Element sets
