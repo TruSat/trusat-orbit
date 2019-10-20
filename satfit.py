@@ -3585,7 +3585,7 @@ def object_search(db=False,startDate=False,object=False):
                 pass
 
         if not (startDate):
-            result = db.findDateNewestTTLE(object)
+            result = db.findDateNewestTLE(object, classification='T')
             if (result):
                 startDate = result
                 classification='T'
@@ -3785,13 +3785,13 @@ def object_tle_test(db=False):
                 print("No obs for object {} between {} and {}".format(object,startTime,endTime))
                 TLE2 = db.findNextUnprocessedTLE(object,endTime)
                 if not TLE2:
-                    print("No more unprocessed TLEs found for norad_number {} after epoch {}".format(object, endTime))
-                    if (endTime == currentTime):
+                    print("No more unprocessed TLEs found for norad_number {}".format(object))
+                    print("Grabbing newest IODs after epoch {} ".format(endTime))
+                    endTime = currentTime
+                    IODs = db.selectIODlistSubmitRange(object, startTime, endTime)
+                    TLE2 = db.selectTLEEpochNearestDate(endTime,object)
+                    if not IODs:
                         result = False
-                        continue
-                    else:
-                        print("Out of TLE for {} grabbing newest IODs".format(object))
-                        endTime = currentTime
                         continue
                 else:
                     endTime = TLE2.epoch_datetime
