@@ -3752,6 +3752,7 @@ def object_process(db=False,startDate=False,object=False):
 def object_tle_test(db=False):
     """ object_tle_test: Loop through all observations for a particular object, generate TLE_process RMS from existing TLEs without fit. """
     object = False
+    currentTime = datetime.now()
 
     objects = db.findObjectsWithIODsNotUsedInTTLEs()
     for object in objects:
@@ -3785,8 +3786,12 @@ def object_tle_test(db=False):
                 TLE2 = db.findNextUnprocessedTLE(object,endTime)
                 if not TLE2:
                     print("No more unprocessed TLEs found for norad_number {} after epoch {}".format(object, endTime))
-                    result = False
-                    continue
+                    if (endTime == currentTime):
+                        result = False
+                        continue
+                    else:
+                        endTime = currentTime
+                        continue
                 else:
                     endTime = TLE2.epoch_datetime
                     continue
