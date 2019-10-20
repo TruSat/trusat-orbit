@@ -567,7 +567,7 @@ def posradang(a):
 
 
 # TODO: move to C-accelerated module
-# def acose(x):
+def acose(x):
     if ( x >= 1):
         rval = 0
     elif ( x <= -1):
@@ -3790,6 +3790,7 @@ def object_tle_test(db=False):
                         result = False
                         continue
                     else:
+                        print("Out of TLE for {} grabbing newest IODs".format(object))
                         endTime = currentTime
                         continue
                 else:
