@@ -1,9 +1,8 @@
 #!/usr/bin/env python
-
+""" tle_util.py - Utilities to import, export, validate and operate on Two-Line Element sets """
 # Online TLE update portions from  from stvid/update_tle.py
 # https://github.com/cbassa/stvid/blob/master/update_tle.py
 # TODO May need facility to access archived TLEs (at SpaceTrack) 
-#      And something else for old McCants TLEs
 
 from __future__ import print_function
 from __future__ import division         # Eliminate need for decimals on whole values

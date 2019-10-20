@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# Similar code elsewhere (not in master repo):
-# https://github.com/aerospaceresearch/orbitdeterminator/blob/866e5c031d5b1d836061d6ec2b105b8961c657d8/orbitdeterminator/satobs.py
+""" iod.py - Utilities for importing, validating, and operating on IOD/RDE/UK positional formatting formats """
 import sys
 
 if sys.version_info[0] != 3 or sys.version_info[1] < 6:
@@ -480,7 +479,7 @@ class Angle:
 
 			# 3: IOD RA/DEC = HHMMmmm0+DDdddd0 MX   (MX in degrees of arc, no need to convert)
 			# 3:  UK RA/DEC = HHMMmmmm+DDddddd Dddd (degrees of arc)
-			elif(self.AngleFormatCode == 3):
+			elif (self.AngleFormatCode == 3):
 				self.RA  = angle_from_HHMMmmmm(self.Angle1)
 				self.DEC = angle_from_DDDddddd(self.Angle2)
 
@@ -509,7 +508,7 @@ class Angle:
 
 			# 5: IOD AZ/EL  = DDDMMmm0+DDMMmm0 MX   (MX in minutes of arc)
 			# 5:  UK AZ/EL  = DDDMMmmm+DDMMmmm MMmm (minutes of arc) (elevation corrected for refraction)
-			elif(self.AngleFormatCode == 5):
+			elif (self.AngleFormatCode == 5):
 				self.AZ = angle_from_DDDMMmmm(self.Angle1)
 				self.EL = angle_from_DDDMMmmm(self.Angle2)
 
@@ -525,7 +524,7 @@ class Angle:
 
 			# 6: IOD AZ/EL  = DDDdddd0+DDdddd0 MX   (MX in degrees of arc, no need to convert)
 			# 6:  UK AZ/EL  = DDDddddd+DDddddd Dddd (degrees of arc) (elevation corrected for refraction)
-			elif(self.AngleFormatCode == 6):
+			elif (self.AngleFormatCode == 6):
 				self.AZ = angle_from_DDDddddd(self.Angle1)
 				self.EL = angle_from_DDDddddd(self.Angle2)
 
@@ -537,7 +536,7 @@ class Angle:
 						self.Uncertainty = 0
 
 			# 7:   RA/DECvv = HHMMSSs+DDdddd MX   (MX in degrees of arc, no need to convert)
-			elif(self.AngleFormatCode == 7 and self.RecordFormat == "IOD"):
+			elif (self.AngleFormatCode == 7 and self.RecordFormat == "IOD"):
 				self.RA  = angle_from_HHMMSSss(self.Angle1)
 				self.DEC = angle_from_DDDddddd(self.Angle2)
 
@@ -1520,7 +1519,7 @@ def get_IOD_record_counts(IOD_records):
 
 def write_uk_line(IOD):
 	""" Writes a UK-formatted line given an IOD class variable as input """
-	# TODO: Work in progress.  Currently stalled at converting decmal angle back to the string format.
+	# TODO: Work in progress.  Currently stalled at converting decimal angle back to the string format.
 
 	launch_year = int(IOD.InternationalDesignation[0:2])
 	# launch_year = datetime.strftime(datetime(launch_year,1,1),'%y')
