@@ -112,14 +112,3 @@ venv.bak/
 *.txt
 *.in
 *.tle
-sat.txt-master
-cython-setup.py
-gravconst.py
-numba_type_test.py
-satfit-numba-trials-20190907.py
-satfit.c
-satfit.pyx
-satid.py
-sf.py
-satfit.pyx-old
-satfit.html
