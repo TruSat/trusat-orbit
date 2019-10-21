@@ -23,6 +23,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+# FIXME: Note python-skyfield is not currently compatible with cythonized python-sgp4
 from skyfield.api import Topos, load
 
 # The following 5 lines are necessary until our modules are public
