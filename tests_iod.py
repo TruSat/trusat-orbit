@@ -523,7 +523,7 @@ class Tests(TestCase):
         test_file = "tests/IOD_data_compliant.txt" 
         IODs = iod.get_iod_records_from_file(test_file)
 
-        self.assertEqual(len(IODs),45,msg="Failed to read all (45) compliant IODs")
+        self.assertEqual(len(IODs),46,msg="Failed to read all (46) compliant IODs")
 
         test_iod_string = "23794 96 010A   2701 G 20040506012614270 17 25 1100114-184298 38 I+020 10  10000 # Comments after the line here"
         IOD = iod.parse_iod_lines(test_iod_string)[0]
