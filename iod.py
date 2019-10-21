@@ -668,7 +668,7 @@ new_iod_format_re = re.compile(r"""
 	    |\s{16}	# Or match empty from beginning for 16 characters
 	)	# END NORAD/INTL DES GROUP 
     \d{4}\s			# Station
-    [EGFPBTCO]\s	# Station status code
+    [EGFPBTCO ]\s	# Station status code
     [\d+]{8}			# YYYYMMDD
     (               # BEGIN optional remaining data GROUP
 	\d*\s*$|		# End of the record, or
