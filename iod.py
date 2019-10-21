@@ -657,7 +657,7 @@ class IOD:
 #iod_format_re = re.compile ('^(\d{5}\s\d{2}\s\d{3}\D*)*\s{1,16}(\d{4}\s)(\D)\s(\d{8})(\d{0,9}$|\d{0,9}\s+\d\d.*)')
 
 # This one catches all the good lines, and lets a ones with invalid VMAG/FLASH data through
-# More description here: https://regex101.com/r/KfaY7g/1
+# More description here: https://regex101.com/r/KfaY7g/2
 new_iod_format_re = re.compile(r"""
     ^	# Start at beginning of string
     (	# BEGIN NORAD/INTL DES GROUP 
