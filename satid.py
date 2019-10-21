@@ -27,6 +27,7 @@ sys.path.insert(1, '../python-sgp4')
 # https://github.com/skyfielders/python-skyfield/pull/276
 sys.path.insert(2, '/Users/chris/Dropbox/code/preMVP/python-skyfield')
 
+# FIXME: Note python-skyfield is not currently compatible with cythonized python-SGP4
 from skyfield.iokit import Loader, download, parse_tle
 from skyfield import sgp4lib
 
