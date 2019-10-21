@@ -109,6 +109,6 @@ venv.bak/
 *.dat
 *.bsp
 *.preds
-*.txt
+./*.txt
 *.in
 *.tle
