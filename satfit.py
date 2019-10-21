@@ -2002,7 +2002,9 @@ def accept_command(db, sat, rd, ll, odata, sum, uu, iod_line):
         elif (cmd == "S"):  # Step
             sat = step(sat, rd, ll, odata, sum, uu, "S")
             print_el(sat)       # print new elements
-
+        elif (cmd == "L"):  # Loop-Step
+            sat = step(sat, rd, ll, odata, sum, uu, "L")
+            print_el(sat)       # print new elements
         elif (cmd == "Z"):
             sat = step(sat, rd, ll, odata, sum, uu, "Z")
             print_el(sat)       # print new elements
@@ -2186,7 +2188,7 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
 
     # sat = delta_el(sat, xmo=radians(ma)) # Not needed, as latest ma returned from above
     # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
- 
+
     emax = sat.ecco * 1.1
     emin = sat.ecco * 0.9
     wmax = sat.argpo / de2ra + 2
@@ -2196,13 +2198,13 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
     omax = sat.nodeo / de2ra + 2
     omin = sat.nodeo / de2ra - 2
 
-    # We're not currently capturing input while step() is a loop, so supress this note
-    # print("\nPress Q to Quit    :\n")
+    if (step_type not in ["L","Z"]):
+        print("\nPress Q to Quit    :\n")
     xsum = 0
     lc = 0
     stp_start = time()
     DE = 0
-    while(fabs(sum-xsum)>1e-4):
+    while( (fabs(sum-xsum)>1e-4) and lc <= 50 ):
         lc+=1
         xsum = sum
         ps_start = time()
@@ -2241,14 +2243,17 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
         ELAPSED = stp_lap - stp_start
         print("rms{:12.5f}   Lap time: {:.2f}  PS {:.2f}  NS {:.2f}  DE {:.2f}  --  Elapsed {:.1f} / {}\t".format(sum, lap, PS, NS, DE, ELAPSED, lc),end='\r')
         sys.stdout.flush()
-        # buf = input("    : ")
 
-        # try:
-        #     buf = buf.strip().upper()
-        #     if (buf == 'Q'):
-        #         break
-        # except NameError:
-        #     continue
+        if (step_type not in ["L","Z"]):
+            print()
+            buf = input("    : ")
+
+            try:
+                buf = buf.strip().upper()
+                if (buf == 'Q'):
+                    break
+            except NameError:
+                continue
 
     print()
     # print("Step: {} loop iterations".format(lc))
@@ -3307,50 +3312,6 @@ def initsat(TLE,gravconst="wgs72"):
         return satrec
 
 
-# FIXME: Probably no longer needed with current implementation of delta_el
-def re_initsat(satrecnew, new_ma, new_raan, new_jdepoch):
-    satrec = copy.deepcopy(satrecnew)
-
-    rtn_code = sgp4init(satrec.whichconst, satrec.operationmode, satrec.satnum, 
-             new_jdepoch-2433281.5, # epoch time in days from jan 0, 1950. 0 hr
-             satrec.bstar, satrec.ndot, satrec.nddot, satrec.ecco, satrec.argpo, 
-             satrec.inclo, new_ma, satrec.no_kozai, new_raan, satrec)
-    if (rtn_code is not True):
-        if (satrec.error == 1):
-            log.error("sgp4init error {}".format(satrec.error))
-            log.error("mean elements, ecc >= 1.0 or ecc < -0.001 or a < 0.95 er")
-            return False
-        elif (satrec.error == 2):
-            log.error("sgp4init error {}".format(satrec.error))
-            log.error("mean motion less than 0.0")
-            return False
-        elif (satrec.error == 3):
-            log.error("sgp4init error {}".format(satrec.error))
-            log.error("pert elements, ecc < 0.0  or  ecc > 1.0")
-            return False
-        elif (satrec.error == 4):
-            log.error("sgp4init error {}".format(satrec.error))
-            log.error("semi-latus rectum < 0.0")
-            return False
-        elif (satrec.error == 5):
-            log.error("sgp4init error {}".format(satrec.error))
-            log.error("epoch elements are sub-orbital")
-            return False
-        elif (satrec.error == 6):
-            log.error("sgp4init error {}".format(satrec.error))
-            log.error("satellite has decayed")
-            return False
-        else:
-            log.error("sgp4init error {}".format(satrec.error))
-            log.error("Unknown error code")
-            return False
-    else:
-        satrec.jdsatepoch = new_jdepoch # FIXME: A little astonished that satrec doesn't have a mechanism for storing its own Epoch
-        satrec.jdSGP4epoch = satrec.jdsatepoch - 2433281.5
-        satrec.epoch_datetime = jday_to_datetime(satrec.jdsatepoch)
-        return satrec
-
-
 def raw_search(db=False):
     global iod_line #FIXME: get rid of this global
     classification='U' # FIXME: Default to this unless overridden
@@ -3672,6 +3633,61 @@ def object_search(db=False,startDate=False,object=False):
     # Accept a new command
     accept_command(db, sat, rd, ll, odata, sum, uu, iod_line)
 
+def object_manual(db=False,startDate=False,object=False):
+    """ Script-assisted manual processing """
+    object = False
+    objects = db.findObjectsWithIODsNewerThanTLE()
+    print("\n{} objects remaining with IODs newer than the latest TLE".format(len(objects)))
+    for object in objects:
+        result = True # Start the loop off
+        while (result):
+            IOD_candidates = db.findIODsNewerThanPenultimateTLE(object)
+            if (len(IOD_candidates)==0):
+                print("No more observations found for norad_number {}".format(object))
+                result = False
+                continue
+
+            IODs = db.selectIODlist(IOD_candidates)
+
+            iod_line = []
+            for i in IODs:
+                iod_line.append(i.iod_string)
+
+            try:
+                TLE = db.selectTLEEpochBeforeDate(IODs[0].obs_time, object)    # FIXME: Probably want to call elfind in a rebuild case
+                print("Using tle_id {} as reference:".format(TLE.tle_id))
+                print("{}".format(TLE.name))
+                print("{}".format(TLE.line1))
+                print("{}".format(TLE.line2))
+            except:
+                log.warning("NO TLE found for object '{}' with EPOCH before {}".format(object,IODs[0].obs_time))
+                result = False
+                continue
+
+            Stations = db.getStationDictforIODs(IODs)
+            if (not len(Stations)):
+                log.warning("NO Station data found for observations.")
+                result = False
+                continue
+
+            (odata, ll, rd, t1) = read_obssf(IODs, Stations) # Use the scott-campbell way while debugging against satfit.cpp
+
+            sat = initsat(TLE)
+            sat.thetag = t1.thetag  # FIXME: Find a different way to get this, or how its used in anomaly()
+            sat.parent_tle_id = TLE.tle_id
+
+            # // calculate uu, degrees, for search
+            uu = longitude(sat)
+
+            nobs = len(IODs)
+
+            start_rms = find_rms(sat, rd, ll, odata) # Establish baseline rms for global
+            print("\n{} Observations Found".format(nobs))
+            print("\nStarting rms{:12.5f}".format(start_rms))
+
+            # Accept a new command
+            accept_command(db, sat, rd, ll, odata, start_rms, uu, iod_line)
+
 
 def object_process(db=False,startDate=False,object=False):
     """ object_process: Loop through all observations for a particular object """
@@ -3931,8 +3947,8 @@ def main(db=False):
     # iod_obs_id = input("IOD db ID: ")
     while(True):
         print("\nEnter command")
-        print("Database: (I)OD search (O)bject search (L)atest (M)cCants TLE baseline q(U)eue")
-        print("          ra(W) search")
+        print("Database: (I)OD search (O)bject search (L)atest (M)anual Process Latest q(U)eue")
+        print("          ra(W) search Mc(C)ants TLE baseline")
         print("(Q)uit")
 
         cmd = input(": ").strip()
@@ -3942,7 +3958,9 @@ def main(db=False):
             iod_search(db)
         elif (cmd == "O"):  # Object search
             object_search(db)
-        elif (cmd == "M"):  # McCants TLE baseline
+        elif (cmd == "M"):  # Manual Supdate
+            object_manual(db)
+        elif (cmd == "C"):  # McCants TLE baseline
             object_tle_test(db)
         elif (cmd == "W"):  # Raw search
             raw_search(db)
