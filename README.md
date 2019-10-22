@@ -7,7 +7,8 @@ Currently, its orbit determination code is based on a Python port of [Scott Camp
 # Getting started with TruSat-orbit
 First, we recommend setting up a [python virtual environment](https://realpython.com/python-virtual-environments-a-primer/)
 ```
-git clone https://github.com/consensys-space/trusat-orbit.git 
+git clone https://github.com/consensys-space/trusat-orbit.git
+cd trusat-orbit
 pip install -r requirements.txt
 python satfit.py
 ```
