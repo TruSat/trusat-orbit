@@ -320,7 +320,9 @@ class TruSatellite(object):
         self.strict    = strict
         self.checksum  = checksum
 
+
         # Variables users would likely want regular access to
+        self.sat_name = self.name = None
         self.satellite_number = None
         self.classification = None  # Note: Set this to "O" (or some less ambiguous character) to indicate source?
         self.designation = None
