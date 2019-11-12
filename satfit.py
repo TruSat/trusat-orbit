@@ -3438,7 +3438,7 @@ def iod_search(db=False):
             pass
 
         IOD_candidates = db.selectIODListat(iod_obs[0])
-        if (len(iod_obs)==1):
+        if (len(iod_obs)==1 and iod_obs_inp.find('.') < 0 ):
             print("obs_id satnum STA  user              obs_time  RA   DEC")
             for r in IOD_candidates:
                 print("{ID:7} {NUM:5} {STA:4} {USR} {TIME} ra:{RA:<8.4f} dec:{DEC:<8.4}".format(
@@ -3454,6 +3454,9 @@ def iod_search(db=False):
         elif(len(iod_obs)==0):
             print("No observations found for obs_id {}".format(iod_obs))
             continue
+        elif(iod_obs_inp.find('.')>0):
+            iod_obs = [int(iod_obs_inp.replace(".",""))]
+            IODsq = db.selectIODlist(iod_obs)
         else:
             IODsq = db.selectIODlist(iod_obs)
 
@@ -3546,7 +3549,7 @@ def object_search(db=False,startDate=False,object=False):
                 pass
 
         if not (startDate):
-            result = db.findDateNewestTLE(object, classification='T')
+            result = db.findDateNewestTLE(object)
             if (result):
                 startDate = result
                 classification='T'
@@ -3559,7 +3562,8 @@ def object_search(db=False,startDate=False,object=False):
                 # If we're entering the function with a start date, we've created a TTLE
                 classification='T'
 
-        IOD_candidates = db.findObservationCluster(object,startDate=startDate,minObserverCount=1)
+        # IOD_candidates = db.findObservationCluster(object,startDate=startDate,minObserverCount=1)
+        IOD_candidates = db.findLastNIODs(object, IOD_count=10)
         if (len(IOD_candidates)==0):
             print("No observations found for norad_number {}".format(object))
             main(db)
@@ -3572,7 +3576,7 @@ def object_search(db=False,startDate=False,object=False):
 
         try:
             if (classification=='T'):
-                TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object,classification=classification)    # FIXME: Probably want to call elfind in a rebuild case
+                TLE = db.selectTLEEpochNearestDate(startDate, object)    # FIXME: Probably want to call elfind in a rebuild case
             else:
                 TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object)    # FIXME: Probably want to call elfind in a rebuild case
             print("Using tle_id {} as reference:".format(TLE.tle_id))
@@ -3636,12 +3640,12 @@ def object_search(db=False,startDate=False,object=False):
 def object_manual(db=False,startDate=False,object=False):
     """ Script-assisted manual processing """
     object = False
-    objects = db.findObjectsWithIODsNewerThanTLE()
+    objects = db.findObjectsWithIODsSubmittedAfterTLE()
     print("\n{} objects remaining with IODs newer than the latest TLE".format(len(objects)))
     for object in objects:
         result = True # Start the loop off
         while (result):
-            IOD_candidates = db.findIODsNewerThanPenultimateTLE(object)
+            IOD_candidates = db.findIODsSubmittedAfterPenultimateTLE(object)
             if (len(IOD_candidates)==0):
                 print("No more observations found for norad_number {}".format(object))
                 result = False
@@ -3654,13 +3658,13 @@ def object_manual(db=False,startDate=False,object=False):
                 iod_line.append(i.iod_string)
 
             try:
-                TLE = db.selectTLEEpochBeforeDate(IODs[0].obs_time, object)    # FIXME: Probably want to call elfind in a rebuild case
+                TLE = db.selectTLEEpochBeforeDate(IODs[0].submitted, object)    # FIXME: Probably want to call elfind in a rebuild case
                 print("Using tle_id {} as reference:".format(TLE.tle_id))
                 print("{}".format(TLE.name))
                 print("{}".format(TLE.line1))
                 print("{}".format(TLE.line2))
             except:
-                log.warning("NO TLE found for object '{}' with EPOCH before {}".format(object,IODs[0].obs_time))
+                log.warning("NO TLE found for object '{}' with EPOCH before {}".format(object,IODs[0].submitted))
                 result = False
                 continue
 
@@ -3764,6 +3768,13 @@ def object_process(db=False,startDate=False,object=False):
             log.error("DB Insert failed.")
             main(db)
 
+def object_needs_TLE(db=False):
+    objects = db.findObjectsWithIODsButNoTLEs()
+    num_objects = len(objects)
+    print("Found {} objects needing TLEs".format(num_objects))
+    for item in objects:
+        print(item)
+    main(db)
 
 def object_tle_test(db=False):
     """ object_tle_test: Loop through all observations for a particular object, generate TLE_process RMS from existing TLEs without fit. """
@@ -3948,7 +3959,7 @@ def main(db=False):
     while(True):
         print("\nEnter command")
         print("Database: (I)OD search (O)bject search (L)atest (M)anual Process Latest q(U)eue")
-        print("          ra(W) search Mc(C)ants TLE baseline")
+        print("          ra(W) search Mc(C)ants TLE baseline (N)eeds TLE")
         print("(Q)uit")
 
         cmd = input(": ").strip()
@@ -3962,6 +3973,8 @@ def main(db=False):
             object_manual(db)
         elif (cmd == "C"):  # McCants TLE baseline
             object_tle_test(db)
+        elif (cmd == "N"):  # Objects needing TLEs
+            object_needs_TLE(db)
         elif (cmd == "W"):  # Raw search
             raw_search(db)
         elif (cmd == "L"):  # Latest observations
