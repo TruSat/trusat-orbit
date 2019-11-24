@@ -99,6 +99,16 @@ def tle_fmt_int(num, digits=5):
     return string_int
 
 
+def tle_fmt_float(num,width=10):
+    """ Return a left-aligned signed float string, with no leading zero left of the decimal """
+    digits = (width-2)
+    ret = "{:<.{DIGITS}f}".format(num,DIGITS=digits)
+    if ret.startswith("0."):
+        return " " + ret[1:]
+    if ret.startswith("-0."):
+        return "-" + ret[2:]
+
+
 def tle_fmt_epoch(EpochDateTime):
     """ Return an Epoch string in TLE format, with a total width of 14 characters
 
@@ -392,6 +402,23 @@ class TruSatellite(object):
             except TLEValueError:
                 log.warning("{}: Encountered errors in processing the following TLE block:\t{}\n\t{}\n\t{}".format(self._tle_source_filename, self.line0,self.line1,self.line2))
 
+    def correct_value_ranges(self):
+        """ Adjust angular ranges outside of customary ranges
+
+        e.g. 0 <= var1 < 360
+             0 <= var2 < 180
+             0 <= var3 < 2 pi
+             0 <= var4 < pi
+        """
+        self.raan_degrees         = self.raan_degrees         % 360
+        self.arg_perigee_degrees  = self.arg_perigee_degrees  % 360
+        self.mean_anomaly_degrees = self.mean_anomaly_degrees % 360
+
+        if (not (0 <= self.inclination_degrees <= 180)):
+            self.inclination_degrees = self.inclination_degrees % 180
+            self.raan_degrees = self.raan_degrees = (self.raan_degrees + 180) % 360
+
+
     def derived_values(self):
         """ Calculate values which are determined from TLE parameters """
         self.epoch_string = self.epoch_datetime.isoformat(timespec='microseconds')
@@ -622,13 +649,17 @@ class TruSatellite(object):
             LAUNCH_NUM  = self._id_launch_num,
             LAUNCH_PIECE_LETTER = self._id_launch_piece_letter)
 
+        self.correct_value_ranges()
+
+        tle_mean_motion_derivative = tle_fmt_float(self.mean_motion_derivative,width=10)
+
         # TODO: Deal with First Derivative xno, Second derivative xno, Bstar
-        line1 = "1 {:5d}{:1} {:<8s} {:14s} {:<10.8f} {:8s} {:8s} {:1d}{:4s}00".format(
+        line1 = "1 {:05d}{:1} {:<8s} {:14s} {:10s} {:8s} {:8s} {:1d}{:4s}00".format(
             self.satellite_number,
             self.classification,
             packed_designation,
             tle_epoch,
-            self.mean_motion_derivative,
+            tle_mean_motion_derivative,
             tle_fmt_decimal_pack(self.mean_motion_sec_derivative),
             tle_fmt_decimal_pack(self.bstar),
             self.ephemeris_type,
@@ -777,7 +808,7 @@ def assumed_decimal_point(num_less_than_one, digits=7):
     string_num = "{0:.{DIGITS}f}".format(num,DIGITS=digits)
     return(string_num[2:])
 
-
+# FIXME: This function currently only used by elfind.py - update elfind to use make_tle_lines instead
 def make_tle(*, name="None", ssn, desig="0000000", epoch_datetime, xincl, xnodeo, eo, omegao, xmo, xno, deg=True, quiet=False):
     """ write TLE to output file and to screen """
 
@@ -824,7 +855,7 @@ def make_tle(*, name="None", ssn, desig="0000000", epoch_datetime, xincl, xnodeo
         if not quiet:
             print("{:s}".format(line0))
 
-    line1 = "1 {:5d}U {:<8s} {:14s} 0.00000073  00000-0  50000-4 0    00".format(ssn,desig,tle_epoch)
+    line1 = "1 {:05d}U {:<8s} {:14s} 0.00000073  00000-0  50000-4 0    00".format(ssn,desig,tle_epoch)
     # TODO: Deal with First Derivative xno, Second derivative xno, Bstar
     line2 = "2 {:05d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}    00".format(
             ssn, xincl, xnodeo, eo_string, omegao, xmo, xno)
@@ -886,6 +917,7 @@ def make_tle_from_SGP4_satrec(satrec, classification="T"):
 
     TLE.launch_piece_number	= launch_piece_letter_to_number(TLE.designation)
 
+    TLE.correct_value_ranges()
     TLE.derived_values()
     TLE.make_tle_lines()
     TLE._fingerprint_tle()
