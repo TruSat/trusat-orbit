@@ -26,12 +26,14 @@ import numpy as np
 import logging
 import string
 import copy
+import re
 from getpass import getpass # For getting input without newline
 
 import logging
 log = logging.getLogger(__name__)
 
 from spacetrack import SpaceTrackClient
+import pickle
 
 # python SGP4 from git+https://github.com/interplanetarychris/python-sgp4@cython-7-dec-15-vallado
 # Until the following pull request is approved
@@ -69,6 +71,7 @@ db = None
 startDate = False
 
 # FIXME: Legacy globals which are being worked out of the code
+TLE_ref = None  # External TLE seed reference file
 srch = "W"      # Search scope
 epoch = None    # epoch of elements in tle format
 ii = None   # inclination, degrees
@@ -837,6 +840,7 @@ def print_el(sat, deg=False, quiet=False):
         print("{:s}".format(newTLE.line0))
         print("{:s}".format(newTLE.line1))
         print("{:s}".format(newTLE.line2))
+        print("  {:.1f}km x {:.1f}km x {:.1f} degrees   {:.1f} min period".format(newTLE.apogee,newTLE.perigee,newTLE.inclination_degrees,newTLE.period/60))
     return(newTLE.line0, newTLE.line1, newTLE.line2)
 
 
@@ -954,6 +958,33 @@ def find_rms(satx, rd, ll, odata):
 
         # sum position error in squared degrees
         zum += Perr*Perr
+
+        # ## Beginning of Velocity/Time portion
+
+        # # difference between computed and observed position vectors, delr, in e.r.
+        # temp = np.cross(satx.rr, satx.vv)  # xtrk reference vector points left of track
+        # sign = SGN(np.dot(delr, temp))
+
+        # # observer velocity vector
+        # tempv = np.cross(zz, rd[j])
+        # temp = .004351409367 * tempv 
+        # # observed satellite velocity
+        # tempv = satx.vv - temp
+        # nvv = mag(tempv)
+
+        # # angle between delr vector and tempv vector, radians
+        # alpha = acose(np.dot(tempv, delr) / (nvv * mag(delr)))
+
+        # # magnitude of delr in direction of tempv, radians
+        # delt = atan(cos(alpha) * tan(Perr))   # geocentric range error
+
+        # # time error
+        # delt *= nrr / nvv                     # delta r in min
+        # delt *= 60                            # seconds
+        # ## End of Velocity/Time portion
+
+        # zum += delt*delt
+
     return sqrt(zum / nobs)
 
 
@@ -1837,12 +1868,20 @@ def viewobs(iod_line):
 
 def remove(rd, ll, odata, iod_line):
     buf = input("\nRemove Line Number : ")
-    j = int(buf.strip())
 
-    rd_del    = np.delete(rd,j-1,0)
-    ll_del    = np.delete(ll,j-1,0)    
-    odata_del = np.delete(odata,j-1,0)
-    iod_line.pop(j-1) 
+    match = re.search("^([f])?(\d+)",buf)
+    if (match):
+        j = int(match.group(2).strip())
+        if (match.group(1)== "f"):
+            rd_del    = np.delete(rd,slice(0,j),0)
+            ll_del    = np.delete(ll,slice(0,j),0)    
+            odata_del = np.delete(odata,slice(0,j),0)
+            iod_line = iod_line[j-1:]
+        else:
+            rd_del    = np.delete(rd,j-1,0)
+            ll_del    = np.delete(ll,j-1,0)    
+            odata_del = np.delete(odata,j-1,0)
+            iod_line.pop(j-1) 
 
     return rd_del, ll_del, odata_del, iod_line
 
@@ -1993,8 +2032,10 @@ def accept_command(db, sat, rd, ll, odata, sum, uu, iod_line):
             edit_history()
         elif (cmd == "C"):  # Elcor
             elcor(sat, rd, ll, odata)
-        elif (cmd == "O"):  # Discover
-            discover(sat, rd, ll, odata)
+        # elif (cmd == "O"):  # Discover
+        #     discover(sat, rd, ll, odata)
+        elif (cmd == "O"):  # Object search
+            object_search(db,  object=sat.satnum)
         elif (cmd == "U"):  # Maneuver
             sat = maneuver(sat, rd, ll, odata, sum, iod_line)
 
@@ -3539,6 +3580,7 @@ def iod_search(db=False):
 
 def object_search(db=False,startDate=False,object=False):
     global iod_line #FIXME: get rid of this global
+    global TLE_ref
 
     while(True):
         if not object:
@@ -3563,7 +3605,7 @@ def object_search(db=False,startDate=False,object=False):
                 classification='T'
 
         # IOD_candidates = db.findObservationCluster(object,startDate=startDate,minObserverCount=1)
-        IOD_candidates = db.findLastNIODs(object, IOD_count=10)
+        IOD_candidates = db.findLastNIODs_noTLE(object, IOD_count=30)
         if (len(IOD_candidates)==0):
             print("No observations found for norad_number {}".format(object))
             main(db)
@@ -3575,14 +3617,46 @@ def object_search(db=False,startDate=False,object=False):
             iod_line.append(i.iod_string)
 
         try:
-            if (classification=='T'):
-                TLE = db.selectTLEEpochNearestDate(startDate, object)    # FIXME: Probably want to call elfind in a rebuild case
-            else:
-                TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object)    # FIXME: Probably want to call elfind in a rebuild case
-            print("Using tle_id {} as reference:".format(TLE.tle_id))
-            print("{}".format(TLE.name))
-            print("{}".format(TLE.line1))
-            print("{}".format(TLE.line2))
+            tle_id = False
+            while(True):
+                if (not tle_id):
+                    if (classification=='T'):
+                        TLE = db.selectTLEEpochNearestDate(startDate, object)    # FIXME: Probably want to call elfind in a rebuild case
+                    else:
+                        TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object)    # FIXME: Probably want to call elfind in a rebuild case
+                print("Using tle_id {} as reference:".format(TLE.tle_id))
+                print("{}".format(TLE.name))
+                print("{}".format(TLE.line1))
+                print("{}".format(TLE.line2))
+
+                print()
+                print("[Return] for current TLE.  TLE [I]d#  Nearest to [F]irst/[L]ast Obs  [P]revious epoch\n[E]xternal  [Q]uit to main")
+                TLE_pref = input(" :").strip()
+
+                if (TLE_pref == ""):
+                    break
+
+                try: 
+                    tle_id = int(TLE_pref)
+                    TLE = db.selectTLEid(tle_id)
+                except ValueError:
+                    TLE_pref = TLE_pref.upper()
+                    if (TLE_pref == "F"): # Nearest to first obs
+                        TLE = db.selectTLEEpochNearestDate(IODs[0].obs_time, object)
+                    elif (TLE_pref == "L"): # Nearest to last obs
+                        TLE = db.selectTLEEpochNearestDate(IODs[-1].obs_time, object)
+                    elif(TLE_pref == "P"): # Previous Epoch
+                        TLE = db.selectTLEEpochBeforeDate(IODs[0].obs_time, object)
+                    elif(TLE_pref == "E"): # External
+                        try:
+                            TLE = TLE_ref.Satellites[object]
+                            TLE.tle_id = 0
+                            tle_id = True
+                        except:
+                            if (TLE_ref):
+                                log.warning("No external TLE found for object '{}'".format(object))
+                    elif(TLE_pref == "Q"): # Quit to main menu
+                        main(db)
         except:
             log.warning("NO TLE found for object '{}' with EPOCH before {}".format(object,IODs[0].obs_time))
             continue
@@ -3602,6 +3676,9 @@ def object_search(db=False,startDate=False,object=False):
     # get line-of-sight vectors
     # (odata, ll, rd) = read_obs(IOD_Records)
     (odata, ll, rd, t1) = read_obssf(IODs, Stations) # Use the scott-campbell way while debugging against satfit.cpp
+
+    # with open('satfit_performance.pickle', 'wb') as f:
+    #     pickle.dump([odata, ll, rd, t1], f)
 
     sat = initsat(TLE)
     sat.thetag = t1.thetag  # FIXME: Find a different way to get this, or how its used in anomaly()
@@ -3638,14 +3715,28 @@ def object_search(db=False,startDate=False,object=False):
     accept_command(db, sat, rd, ll, odata, sum, uu, iod_line)
 
 def object_manual(db=False,startDate=False,object=False):
+    global TLE_ref 
+
     """ Script-assisted manual processing """
     object = False
+    NoTLEs = False
+
     objects = db.findObjectsWithIODsSubmittedAfterTLE()
     print("\n{} objects remaining with IODs newer than the latest TLE".format(len(objects)))
+    if (len(objects) == 0):
+        days = 30
+        objects = db.findObjectsWithIODsButNoTLEs(days=days)
+        num_objects = len(objects)
+        print("Found {} objects needing TLEs in the last {} days".format(num_objects, days))
+        NoTLEs = True
+
     for object in objects:
         result = True # Start the loop off
         while (result):
-            IOD_candidates = db.findIODsSubmittedAfterPenultimateTLE(object)
+            if (NoTLEs):
+                IOD_candidates = db.findLastNIODs_noTLE(object,IOD_count=20)
+            else:
+                IOD_candidates = db.findIODsSubmittedAfterPenultimateTLE(object)
             if (len(IOD_candidates)==0):
                 print("No more observations found for norad_number {}".format(object))
                 result = False
@@ -3665,8 +3756,18 @@ def object_manual(db=False,startDate=False,object=False):
                 print("{}".format(TLE.line2))
             except:
                 log.warning("NO TLE found for object '{}' with EPOCH before {}".format(object,IODs[0].submitted))
-                result = False
-                continue
+                try:
+                    TLE = TLE_ref.Satellites[object]
+                    TLE.tle_id = 0
+                    print("Using external TLE as reference:")
+                    print("{}".format(TLE.name))
+                    print("{}".format(TLE.line1))
+                    print("{}".format(TLE.line2))
+                except:
+                    if (TLE_ref):
+                        log.warning("NO external TLE found for object '{}'".format(object))
+                    result = False
+                    continue
 
             Stations = db.getStationDictforIODs(IODs)
             if (not len(Stations)):
@@ -3909,6 +4010,9 @@ def main(db=False):
     global srch
     global whichconst
     global iod_line
+    global TLE_ref 
+
+    TLE_ref_file = "/path/to/TLE_reference.txt"
 
     log = logging.getLogger()
 
@@ -3938,6 +4042,12 @@ def main(db=False):
     if (db): # Make this switch on file
         pass
     elif (not db):
+        # Read reference TLEs (once) for seeding new TruSat catalog observations
+        try:
+            TLE_ref = TLEFile(TLE_ref_file)
+        except FileNotFoundError:
+            TLE_ref = None
+
         # Set up database connection
 
         # Temporary database credentials hack
@@ -3969,7 +4079,7 @@ def main(db=False):
             iod_search(db)
         elif (cmd == "O"):  # Object search
             object_search(db)
-        elif (cmd == "M"):  # Manual Supdate
+        elif (cmd == "M"):  # Manual update
             object_manual(db)
         elif (cmd == "C"):  # McCants TLE baseline
             object_tle_test(db)
@@ -3982,7 +4092,7 @@ def main(db=False):
         elif (cmd == "U"):  # View the queue
             pass
         elif (cmd == "Q"):  # Quit to command line
-            sys.exit(0)
+            sys.exit()
 
         # print("{} using station {} Observing Satellite {} : {:.3f} days away from epoch".format(observer_name,station_number,satellite.model.satnum,days))
 
