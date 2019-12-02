@@ -440,9 +440,15 @@ class TruSatellite(object):
         self.mean_motion_radians_per_minute = self.mean_motion_orbits_per_day / xpdotp 
 
         if (self.designation and not self._id_launch_year):
-            self._id_launch_year = int(self.designation[2:4])
+            try:
+                self._id_launch_year = int(self.designation[2:4])
+            except ValueError:
+                self._id_launch_year = None
         if (self.designation and not self._id_launch_num):
-            self._id_launch_num = int(self.designation[5:8])
+            try:
+                self._id_launch_num = int(self.designation[5:8])
+            except ValueError:
+                self._id_launch_num = None
         if (self.designation and not self._id_launch_piece_letter):
             self._id_launch_piece_letter = self.designation[8:].strip()
 
@@ -610,7 +616,8 @@ class TruSatellite(object):
 
         # Launch year might be None or string
         try:
-            if (not (date(1957,1,1) <= date(self._id_launch_year,1,1) <= date.today() )):
+            if (not (date(1957,1,1) <= date(self._id_launch_year,1,1) <= date.today() )
+                    and not self.analyst_object):
                 _validity_errors["launch_year"] = self._id_launch_year
         except TypeError:
             pass    # Should only be None types
@@ -644,10 +651,14 @@ class TruSatellite(object):
         tle_epoch = tle_fmt_epoch(self.epoch_datetime)
         eo_string = assumed_decimal_point(self.eccentricity,7)
 
-        packed_designation = "{LAUNCH_YEAR:02d}{LAUNCH_NUM:03d}{LAUNCH_PIECE_LETTER:<3s}".format(
-            LAUNCH_YEAR = self._id_launch_year,
-            LAUNCH_NUM  = self._id_launch_num,
-            LAUNCH_PIECE_LETTER = self._id_launch_piece_letter)
+        # Analyst objects do not have designation data
+        try:
+            packed_designation = "{LAUNCH_YEAR:02d}{LAUNCH_NUM:03d}{LAUNCH_PIECE_LETTER:<3s}".format(
+                LAUNCH_YEAR = self._id_launch_year,
+                LAUNCH_NUM  = self._id_launch_num,
+                LAUNCH_PIECE_LETTER = self._id_launch_piece_letter)
+        except TypeError:
+            packed_designation = ""
 
         self.correct_value_ranges()
 
