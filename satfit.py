@@ -1553,9 +1553,7 @@ def anomaly_search(sat, rd, ll, odata, sum):
     # global xsum
 
     step = 0.1
-    # mk = ma # FIXME global
     mk = sat.mo / de2ra
-    # sum = find_rms(sat, rd, ll, odata) # PRobably not needed
 
     max = 1 # CPP do loop evaluates while at the end
     min = 0
@@ -1567,7 +1565,6 @@ def anomaly_search(sat, rd, ll, odata, sum):
         while (True):
             min = mk - step
             sat = delta_el(sat, ma=min)
-            # sat.delta_el(sat.jd, ii, om, ec, ww, min, nn, bstar) # FIXME python-SGP4
             nsum = find_rms(sat, rd, ll, odata)
             if (nsum < sum):
                 mk = min
@@ -1579,7 +1576,6 @@ def anomaly_search(sat, rd, ll, odata, sum):
         while (True): 
             max = mk + step
             sat = delta_el(sat, ma=max)
-            # sat.delta_el(sat.jd, ii, om, ec, ww, max, nn, bstar)    # FIXME python-SGP4
             xsum = find_rms(sat, rd, ll, odata)
             if (xsum < sum):
                 mk = max
@@ -1588,7 +1584,6 @@ def anomaly_search(sat, rd, ll, odata, sum):
             break   
         step /= 2
     sat = delta_el(sat, ma=mk)
-    # ma = fmod(mk, 360)
     return sat # Contains the ma at the end of the loop
 
 
@@ -1788,7 +1783,7 @@ def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
 
     # ww = fmod(degrees(sat.argpo), 360)
     # ma = fmod(degrees(sat.mo), 360)
-    return sat
+    return sat, uu
 
 def align(sat, rd, ll, odata):
     """ sets deltaT error at last obs epoch to zero """
@@ -2041,13 +2036,13 @@ def accept_command(db, sat, rd, ll, odata, sum, uu, iod_line):
 
         # Visible functions
         elif (cmd == "S"):  # Step
-            sat = step(sat, rd, ll, odata, sum, uu, "S")
+            (sat, uu) = step(sat, rd, ll, odata, sum, uu, "S")
             print_el(sat)       # print new elements
         elif (cmd == "L"):  # Loop-Step
-            sat = step(sat, rd, ll, odata, sum, uu, "L")
+            (sat, uu) = step(sat, rd, ll, odata, sum, uu, "L")
             print_el(sat)       # print new elements
         elif (cmd == "Z"):
-            sat = step(sat, rd, ll, odata, sum, uu, "Z")
+            (sat, uu) = step(sat, rd, ll, odata, sum, uu, "Z")
             print_el(sat)       # print new elements
         elif (cmd == "I"):  # Incl
             print_el(sat)
@@ -2249,7 +2244,7 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
         lc+=1
         xsum = sum
         ps_start = time()
-        sat = perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin)
+        (sat, uu) = perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin)
         # sat = delta_el(sat, omegao=radians(ww)) # Not needed as ww is returned in sat variable from above
         # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
         ns_start = time()
@@ -2264,6 +2259,7 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
             # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
             de_stop = time()
             DE = de_stop - de_start
+
 
         emax = sat.ecco * 1.01
         emin = sat.ecco * 0.99
@@ -2299,11 +2295,13 @@ def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search withi
     print()
     # print("Step: {} loop iterations".format(lc))
 
+    # update uu, degrees
+    uu = longitude(sat)
 
     sum = print_fit(sat, rd, ll, odata, last_rms)
 
     srch = 'N' # FIXME: Fix this global
-    return sat
+    return sat, uu
 
 
 def incl(sat, rd, ll, odata, sum):
