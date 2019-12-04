@@ -523,14 +523,14 @@ class Tests(TestCase):
         test_file = "tests/IOD_data_compliant.txt" 
         IODs = iod.get_iod_records_from_file(test_file)
 
-        self.assertEqual(len(IODs),46,msg="Failed to read all (46) compliant IODs")
+        self.assertEqual(len(IODs),51,msg="Failed to read all (51) compliant IODs")
 
         test_iod_string = "23794 96 010A   2701 G 20040506012614270 17 25 1100114-184298 38 I+020 10  10000 # Comments after the line here"
         IOD = iod.parse_iod_lines(test_iod_string)[0]
         self.assertEqual(IOD.ObjectNumber, 23794 ,msg="Failed ObjectNumber {}".format(IOD.ObjectNumber))
         self.assertEqual(IOD.LaunchYear, 1996 ,msg="Failed LaunchYear {}".format(IOD.LaunchYear))
         self.assertEqual(IOD.InternationalDesignation, "1996-010A  " ,msg="Failed InternationalDesignation {}".format(IOD.InternationalDesignation))
-        self.assertEqual(IOD.Station, 2701 ,msg="Failed Station {}".format(IOD.Station))
+        self.assertEqual(IOD.Station, "2701" ,msg="Failed Station {}".format(IOD.Station))
         self.assertEqual(IOD.StationStatusCode, "G" ,msg="Failed StationStatusCode {}".format(IOD.StationStatusCode))
         self.assertEqual(IOD.StationStatus, None ,msg="Failed StationStatus {}".format(IOD.StationStatus))
         self.assertEqual(IOD.DateTimeString, "20040506012614270" ,msg="Failed DateTimeString {}".format(IOD.DateTimeString))
@@ -592,7 +592,7 @@ class Tests(TestCase):
 
         obs_file = "tests/UK_data_compliant.txt" 
         IODs = iod.get_uk_records_from_file(obs_file)
-        self.assertEqual(len(IODs),49,msg="Failed to read all (49) compliant IODs")
+        self.assertEqual(len(IODs),52,msg="Failed to read all (52) compliant IODs")
 
         test_uk_string = "9701201201803101520195542  01   12172038  +15585   1  5             +6 +8   190R# Comments after the line here"
         # test_uk_string = "9701201201803101520195542  01   12172038  +15585   1  5             +6 +8   190R# Comments after the line here"
@@ -604,7 +604,7 @@ class Tests(TestCase):
         self.assertEqual(IOD.ObjectNumber, 0 ,msg="Failed ObjectNumber {}".format(IOD.ObjectNumber))
         self.assertEqual(IOD.LaunchYear, 1997 ,msg="Failed LaunchYear {}".format(IOD.LaunchYear))
         self.assertEqual(IOD.InternationalDesignation, "1997-012A" ,msg="Failed InternationalDesignation {}".format(IOD.InternationalDesignation))
-        self.assertEqual(IOD.Station, 2018 ,msg="Failed Station {}".format(IOD.Station))
+        self.assertEqual(IOD.Station, "2018" ,msg="Failed Station {}".format(IOD.Station))
         self.assertEqual(IOD.StationStatusCode, None ,msg="Failed StationStatusCode {}".format(IOD.StationStatusCode))
         self.assertEqual(IOD.StationStatus, None ,msg="Failed StationStatus {}".format(IOD.StationStatus))
         self.assertEqual(IOD.DateTimeString, "03101520195542  " ,msg="Failed DateTimeString {}".format(IOD.DateTimeString))
@@ -643,7 +643,7 @@ class Tests(TestCase):
 
         test_rde_string="2420 1909 0.211 1204\n28\n0502402 184758.93 193923+452358 3.1 3.1 0 S\n999"
 
-        IOD = iod.parse_rde_record(test_rde_string)[0]
+        IOD = iod.parse_rde_record(test_rde_string)
         
         # TODO - Format the RDE "line" as a UK-formatted string.  Work ongoing in iod.py
         iod.write_uk_line(IOD)
