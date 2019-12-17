@@ -668,8 +668,9 @@ def read_obssf(IOD_Records, Stations=None):
 
     nobs = len(IOD_Records) # Number of iod-compliant formatted lines in the input file
 
+    mtype = 'double,double,double,S4,int32'
     ll    = np.zeros((nobs,3))
-    odata = np.zeros((nobs,5))
+    odata = np.zeros((nobs),dtype=mtype)
     rd    = np.zeros((nobs,3))
 
     i = 0
@@ -1250,8 +1251,8 @@ def print_fit(sat, rd, ll, odata, last_rms):
         timestring = obstime.strftime('%y%j %H%M:%S')
         SSS = obstime.strftime('%f')
         SSS = int(1000*(int(SSS)/1E6))
-        fit_string = "({:2d}) {:04d}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}  {:8.5f}".format(
-            j + 1, int(odata[j][3]), timestring, SSS, az, el, asp, xtrk, delt, Perr, tsince_days)
+        fit_string = "({:2d}) {:4s}  {}{:03d}  {:5.1f}  {:5.1f}  {:5.1f}  {:6.2f}   {:6.2f}  {:7.3f}  {:8.5f}".format(
+            j + 1, odata[j][3].decode("utf-8"), timestring, SSS, az, el, asp, xtrk, delt, Perr, tsince_days)
         print(fit_string)
 
         # print fit to file
@@ -4010,7 +4011,7 @@ def main(db=False):
     global iod_line
     global TLE_ref 
 
-    TLE_ref_file = "/path/to/TLE_reference.txt"
+    TLE_ref_file = "/Volumes/astronomy/TLE/bulk.tle"
 
     log = logging.getLogger()
 
