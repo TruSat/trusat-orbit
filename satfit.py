@@ -22,6 +22,7 @@ from datetime import timedelta, datetime
 from time import time                         # For performance timing
 from math import (fabs, radians, sin, cos, pi, sqrt, fmod, acos, asin, atan, tan, degrees, modf)    # Fast/precise math functions                      
 import numpy as np
+import pickle   # For bounty work quick setup
 
 import logging
 import string
@@ -37,13 +38,21 @@ from spacetrack import SpaceTrackClient
 # Until the following pull request is approved
 # https://github.com/brandon-rhodes/python-sgp4/pull/35
 
+# Use local/dev version of python-sgp4
+import inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sgp4_path = os.path.join(parentdir, "python-sgp4")
+sys.path.insert(1,sgp4_path) 
+
 try:
     from sgp4.cpropagation import sgp4, sgp4init
+    from satfit_accelerated import *
+    from sgp4.cmodel import Satellite
 except ImportError as e:
     print(e)
     from sgp4.propagation import sgp4, sgp4init
-from sgp4.ext import jday, invjday
-from sgp4.model import Satellite
+    from sgp4.model import Satellite
 from sgp4 import earth_gravity
 
 import iod 
@@ -58,7 +67,7 @@ backend_path = os.path.join(parentdir, "trusat-backend")
 sys.path.insert(1,backend_path) 
 import database
 
-from elfind import read_obs, rref, SGN, so2r
+# from elfind import read_obs, rref, SGN, so2r
 
 # ///////////// DECLARE GLOBAL VARIABLES ////////////////////////////////////////
 twopi = 2*pi
@@ -436,115 +445,6 @@ class Locate(object):
 def write_tle(file):
     pass
 
-# Optimization: cache a method call instead of calling it on the object
-mag = np.linalg.norm
-
-# def mag(v):
-#     """ Computes the magnitude of a vector ||v|| 
-
-#     Renamed from norm(v) in original Scott Campbell code
-#     to better correspond to function names in SGP4 code.
-#     """
-#     # mag = np.sqrt(np.dot(v, v))
-#     mag = np.linalg.norm(v)
-#     return mag
-
-def unit_vector(v):
-    """ Returns the unit vector of the vector.  """
-    u = v / mag(v)
-    return u
-
-
-def delta_t(sat,t):
-    tsince = (t - sat.jdsatepoch) * 1440.0 # time since epoch in minutes
-
-    (rr, vv) = sgp4(sat,tsince) 
-
-    sat.rr_km = rr
-    sat.vv_kmpersec = vv
-
-    sat.rr = np.asarray(rr) / sat.radiusearthkm # In Earth radii
-    sat.vv = np.asarray(vv) / (sat.radiusearthkm / 60.0)  # In Earth radii / min - seriously!
-
-    return sat
-
-
-def delta_el(sat, xincl=False, xnodeo=False,   eo=False, omegao=False, xmo=False,      xno=False,   bsr=False, 
-                  inclo=False,  nodeo=False, ecco=False,  argpo=False,  mo=False, no_kozai=False,
-                     ii=False,     om=False,   ec=False,     ww=False,  ma=False,       nn=False, bstar=False,  
-            jdsatepoch=False, jdSGP4epoch=False, epoch_datetime=False):
-    """ delta_el - Reinitialize SGP4 satellite object vi sgp4init() with changed Keplerian elements and/or epoch time
-    
-    Units can be passed in via radians or degrees, as is the convention for variable names
-    """
-    if (xincl):
-        sat.inclo = xincl
-    elif (inclo):
-        sat.inclo = inclo
-    elif (ii):
-        sat.inclo = de2ra*ii
-
-    if (xnodeo):
-        sat.nodeo = posradang(xnodeo)
-    elif (nodeo):
-        sat.nodeo = posradang(nodeo)
-    elif (om):
-        sat.nodeo = posradang(de2ra*om)
-
-    if (eo):
-        sat.ecco = eo   
-    elif (ecco):
-        sat.ecco = ecco   
-    elif (ec):
-        sat.ecco = ec   
-
-    if (omegao):
-        sat.argpo = posradang(omegao)
-    elif (argpo):
-        sat.argpo = posradang(argpo)
-    elif (ww):
-        sat.argpo = posradang(de2ra*ww)
-
-    if (xmo):
-        sat.mo = posradang(xmo)
-    elif (mo):
-        sat.mo = posradang(mo)
-    elif (ma):
-        sat.mo = posradang(de2ra*ma)
-
-    if (xno):
-        sat.no_kozai = xno
-    elif (no_kozai):
-        sat.no_kozai = no_kozai
-    elif (nn):
-        sat.no_kozai = nn * nocon
-
-    if (bsr):
-        sat.bstar = bsr
-    elif (bstar):
-        sat.bstar = bstar
-
-    if (jdsatepoch):
-        sat.jdsatepoch = jdsatepoch
-        sat.jdSGP4epoch = sat.jdsatepoch - 2433281.5
-        sat.epoch_datetime = jday_to_datetime(sat.jdsatepoch)
-    elif (jdSGP4epoch):
-        sat.jdSGP4epoch = jdSGP4epoch
-        sat.jdsatepoch = sat.jdSGP4epoch + 2433281.5
-        sat.epoch_datetime = jday_to_datetime(sat.jdsatepoch)
-    elif (epoch_datetime):
-        sat.epoch_datetime = epoch_datetime
-
-        (year, month, day, hour, minute, second) = sat.epoch_datetime.timetuple()[:6]
-        microseconds = int(sat.epoch_datetime.strftime('%f'))
-        sec_with_microseconds = second + microseconds/1.0E6
-
-        sat.jdsatepoch = jday(year, month, day, hour, minute, sec_with_microseconds)
-        sat.jdSGP4epoch = sat.jdsatepoch - 2433281.5
-       
-    sgp4init(sat.whichconst, sat.operationmode, sat.satnum, sat.jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot, sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
-    return sat
-
 
 def jday_to_datetime(jd):
     """ Returns a python datetime corresponding to a julian day """
@@ -555,26 +455,6 @@ def jday_to_datetime(jd):
     jday_datetime = datetime(yy,mm,dd,hr,mn,intss,subsec)    
     return jday_datetime
 
-
-# TODO: move to C-accelerated module
-def posradang(a):
-    if a < 0:
-        return a + twopi
-    elif a > twopi:
-        return a - twopi
-    else:
-        return a
-
-
-# TODO: move to C-accelerated module
-def acose(x):
-    if ( x >= 1):
-        rval = 0
-    elif ( x <= -1):
-        rval = pi
-    else:
-        rval = acos(x)
-    return rval
 
 # // read site data, from file
 def read_site(line):
@@ -923,40 +803,6 @@ def sort(iod_line, odata, ll, rd):
     return [iod_line, odata, ll, rd]
 
 
-# TODO: This function (and those it calls) will benefit the best from accelerating
-# TODO: move to C-accelerated module
-def find_rms(satx, rd, ll, odata):
-    """ find rms of observations against propagated TLE position
-
-    Inputs:
-        sat     Class variable of satellite elements
-        odata       Observation data (numpy array)
-        ll          Line of site vectors (numpy array)
-        rd          Topocentric vectors (numpy array)
-
-    Output:
-        rms     RMS of observations against predict
-    """
-    nobs = rd.shape[0] # Using this instead of len, as it might be better for Cython
-    zum = 0
-    # TODO Improve performance of vectorized version in branch: 
-    # https://github.com/interplanetarychris/python-sgp4/tree/7-dec-15-vallado-tsince-vectorize
-    for j in range(nobs):
-        # advance satellite position
-        satx = delta_t(satx,odata[j][0])
-
-        # predicted topocentric coordinates (sat xyz - observer xyz)
-        # converted to unit vector
-        delr = unit_vector(satx.rr - rd[j])
-
-        # topocentric position error in degrees
-        Perr = ( acose( np.dot(delr, ll[j]) ) )/de2ra
-
-        # sum position error in squared degrees
-        zum += Perr*Perr
-    return sqrt(zum / nobs)
-
-
 # Version of print_fit intended to be non-interactive and store fit to variables
 # New TruSat development in this version, to preserve original functionality of print_fit
 # TODO: move to C-accelerated module
@@ -1264,16 +1110,6 @@ def print_calc_fit(sat, rd, ll, odata, last_rms, TLE_process):
 
 # ////////////////// FUNCTIONS //////////////////////////////////////////////////
 
-# TODO: move to C-accelerated module
-def rtw(ao, ac):
-    """ round the world """
-    if (fabs(ao - ac) > 180):
-        if (ao < 180):
-            ao += 360
-        else:
-            ac += 360
-    return ao - ac
-
 
 # TODO: move to C-accelerated module
 def ww2ma(wx):
@@ -1286,478 +1122,6 @@ def ww2ma(wx):
     ma = e - ec * sin(e)
     return degrees(ma)
 
-
-# TODO: move to C-accelerated module
-def zrll(satx, rd):
-    """ Calculates predicted direction angles, right ascension(ra) and
-    declination(dc), of the line of sight vector, rll, in equatorial coordinates
-    from an observer position, rd, to the satellite position, sat.rr.
-    A subroutine of diff_el.  Satellite object, sat, simplifies prediction
-
-    Inputs:
-        satx    perturbed Satellite object at TLE
-        rd      input, topocentric vector to observer
-    Outputs:
-        ra      calculated right ascension, degrees
-        dc      calculated declination, degrees
-
-    """
-    rll = satx.rr - rd # line of sign vector
-    # return ra and dc, degrees
-    dc = degrees(asin(rll[2] / mag(rll)))
-    ra = degrees(atan(rll[1] / rll[0]))
-    if (rll[0] < 0):
-        ra += 180.0
-    ra = fmod(ra, 360)
-    return (ra, dc)
-
-
-# TODO: move to C-accelerated module
-def diff_el(sat, rd, ll, odata, sum):
-    """ differential correction of elements
-
-    Variables:
-        int i, j, k, c = 0;
-        ra, dc;                 // right ascension, declination variables
-        delta, el;              // small change amount
-        mdata[150][7];          // define matrix for multiple regression
-        dat[2][7];              // define output matrix of zpde utility
-        b[6];                   // output deltas, sat position, velocity, b*
-        rv[6][7];               // normal matrix
-        rac, dcc, rms;
-    """
-
-    c = 0 
-    dat = np.zeros((2,7))
-    # mdata = np.zeros((150,7))
-    # mdata = np.empty((0,7), int)
-    mdata = []
-    rv = np.zeros((6,7))
-    b = np.zeros(6)
-    nobs = len(odata)
-
-    #loop:
-    satx = copy.deepcopy(sat)
-    while(True): # Forever loop (at least for 20 improvements)
-        # begin the main loop of the program
-        for i in range(nobs):
-            satz = copy.deepcopy(sat)                      # differential sat
-
-            delta_t(satx,odata[i][0])
-
-            # first establish the computed ra, dc, at jdo with no perturbations
-            (ra, dc) = zrll(satx, rd[i])     # output ra, dc, degrees
-            rac = ra                        # store computed ra and dc
-            dcc = dc
-
-            # find the deltas and load into output matrix, dat
-            dat[0][6] = rtw(degrees(odata[i][1]), rac)      # store delta_ra
-            dat[1][6] = degrees(odata[i][2]) - dcc          # store delta_dc
-
-            # 6 steps to build differential correction matrix
-            j = 0
-            if (xi):
-                dat[0][j] = .001
-                dat[1][j] = .001
-            else:
-                delta = 0.001                        # change
-                el = copy.copy(satz.inclo)           # store reference
-                # satz.inclo += delta                  # delta element
-                satz = delta_el(satz,xincl=(satz.inclo + delta))
-                satz = delta_t(satz, odata[i][0])    # recalculate with perturbed element # FIXME python-SGP4
-                (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-                # satz.inclo = el                      # restore reference
-                dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-                dat[1][j] = (dc - dcc) / delta
-
-            j = 1
-            delta = 0.001                        # change
-            el = copy.copy(satz.nodeo)          # store reference
-            # satz.nodeo += delta                 # delta element
-            satz = copy.deepcopy(sat)                      # differential sat
-            satz = delta_el(satz,xnodeo=(satz.nodeo + delta))
-            satz = delta_t(satz, odata[i][0])            # recalculate with perturbed element # FIXME: python-SGP4
-            (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-            # satz.nodeo = el                     # restore reference
-            dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-            dat[1][j] = (dc - dcc) / delta
-
-            # Results from this one are fairly different - dat[0][j] -453 vs -474
-            j = 2
-            if (xe):
-                dat[0][j] = 0.00001
-                dat[1][j] = 0.00001
-            else:
-                delta = 0.0001                       # change
-                el = satz.ecco                         # store reference
-                # satz.ecco += delta                     # delta element
-                satz = copy.deepcopy(sat)                      # differential sat
-                satz = delta_el(satz,eo=(satz.ecco + delta))
-                satz = delta_t(satz, odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
-                (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-                # satz.ecco = el                         # restore reference
-                dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-                dat[1][j] = (dc - dcc) / delta
-
-            j = 3
-            if (xw):
-                dat[0][j] = 0.001
-                dat[1][j] = 0.001
-            else:
-                delta = 0.001                        # change
-                el = satz.argpo                     # store reference
-                # satz.argpo += delta                 # delta element
-                satz = copy.deepcopy(sat)                      # differential sat
-                satz = delta_el(satz,omegao=(satz.argpo + delta))
-                satz = delta_t(satz,odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
-                (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-                # satz.argpo = el                     # restore reference
-                dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-                dat[1][j] = (dc - dcc) / delta
-
-            j = 4
-            delta = 0.001                        # change
-            el = satz.mo                        # store reference
-            # satz.mo += delta                    # delta element
-            satz = copy.deepcopy(sat)                      # differential sat
-            satz = delta_el(satz,xmo=(satz.mo + delta))
-            satz = delta_t(satz,odata[i][0])            # recalculate with perturbed element # FIXME: python-SGP4
-            (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-            # satz.mo = el                        # restore reference
-            dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-            dat[1][j] = (dc - dcc) / delta
-
-            # TODO: Investigate whether we should perterb the no_unkozai or no_kozai (doesn't seem to make much difference)
-            j = 5
-            if (xn):
-                dat[0][j] = 0.000001
-                dat[1][j] = 0.000001
-            else:
-                delta = 0.00001                      # change
-                el = satz.no_kozai                        # store reference
-                # satz.no_kozai += delta                    # delta element
-                satz = copy.deepcopy(sat)                      # differential sat
-                satz = delta_el(satz,xno=(satz.no_kozai + delta))
-                satz = delta_t(satz,odata[i][0])            # recalculate with perturbed element # FIXME python-SGP4
-                (ra, dc) = zrll(satz, rd[i])         # perturbed ra, dc
-                # satz.no_kozai = el                        # restore reference
-                dat[0][j] = rtw(ra, rac) / delta     # perturbed - computed
-                dat[1][j] = (dc - dcc) / delta
-
-            # mdata[2 * i]     = dat[0]   # numerical deltas transferred to
-            # mdata[2 * i + 1] = dat[1]   # multiple regresssion matrix
-            mdata.append(dat[0])
-            mdata.append(dat[1])
-            # END for i
-
-
-        # multiple regression
-        for j in range(6):
-            for k in range (7):
-                rv[j][k] = 0
-                for i in range (nobs*2):
-                    rv[j][k] = rv[j][k] + mdata[i][j] * mdata[i][k]
-        b = rref(rv) # Returns false if singular matrix
-
-        # Getting inf and -inf on some results
-        if (np.isinf(b).any()):
-            break
-
-        saty = copy.deepcopy(sat) 
-        # test update components with deltas
-        saty.inclo    += b[0]*0.1
-        saty.nodeo    += b[1]*0.1
-        saty.ecco     += b[2]*0.1
-        saty.argpo    += b[3]*0.1
-        saty.mo       += b[4]*0.1
-        saty.no_kozai += b[5]*0.1
-        saty = delta_el(saty)
-        rms = find_rms(saty, rd, ll, odata)
-        if (rms < sum):
-            sum = rms
-            # update components with deltas
-            sat.inclo    += b[0]*0.1
-            sat.nodeo    += b[1]*0.1
-            sat.ecco     += b[2]*0.1
-            sat.argpo    += b[3]*0.1
-            sat.mo       += b[4]*0.1
-            sat.no_kozai += b[5]*0.1
-            c+=1
-            if (c < 20):
-                continue # Back up to the top of the loop
-            else:
-                break
-        else:
-            break
-
-    sat = delta_el(sat)
-    # print("                  {} diff_el iter".format(c))
-
-    return sat
-    # /*
-    # // display computed deltas for all 6 components and an rms
-    # for(i = 0; i < 6; i++)
-    # {
-    #     printf("\n");
-    #     printf("   %9.6f", b[i]);
-    # }
-    # printf("\n\nrms%9.6f\n", rms);
-    # s_in(": ", buf);
-    # */
-    # global elements updated
-    # ii = degrees(sat.xincl)
-    # om = degrees(sat.xnodeo)
-    # ec = sat.eo
-    # ww = degrees(sat.omegao)
-    # ma = degrees(sat.xmo)
-    # nn = sat.xno/nocon
-
-
-# TODO: move to C-accelerated module
-def anomaly_search(sat, rd, ll, odata, sum):
-    """ mean anomaly box search, no limits """
-    # global ma   # Not supposed to need these unless we're assigning, but alas...
-    # global sum    # Some loops (i.e. perigee_search) want to know the most recent sum to start
-    # global nsum
-    # global xsum
-
-    step = 0.1
-    # mk = ma # FIXME global
-    mk = sat.mo / de2ra
-    # sum = find_rms(sat, rd, ll, odata) # PRobably not needed
-
-    max = 1 # CPP do loop evaluates while at the end
-    min = 0
-    while (fabs(max - min) > 1e-5):
-        min = mk
-        max = mk
-
-        # nsum loop - until rms doesn't decrease since last loop
-        while (True):
-            min = mk - step
-            sat = delta_el(sat, ma=min)
-            # sat.delta_el(sat.jd, ii, om, ec, ww, min, nn, bstar) # FIXME python-SGP4
-            nsum = find_rms(sat, rd, ll, odata)
-            if (nsum < sum):
-                mk = min
-                sum = nsum
-                continue # back to top of nsum loop
-            break # Go forward to xsum loop
-
-        # xsum loop - until rms doesn't decrease since last loop
-        while (True): 
-            max = mk + step
-            sat = delta_el(sat, ma=max)
-            # sat.delta_el(sat.jd, ii, om, ec, ww, max, nn, bstar)    # FIXME python-SGP4
-            xsum = find_rms(sat, rd, ll, odata)
-            if (xsum < sum):
-                mk = max
-                sum = xsum
-                continue # Back to top of xsum loop
-            break   
-        step /= 2
-    sat = delta_el(sat, ma=mk)
-    # ma = fmod(mk, 360)
-    return sat # Contains the ma at the end of the loop
-
-
-# TODO: move to C-accelerated module
-def motion_search(sat, rd, ll, odata):
-    """ mean motion box search, no limits """
-    # nk = nn
-    nk = sat.no_kozai/nocon
-    sum = find_rms(sat, rd, ll, odata)
-
-    # Start with this values to get through the loop once
-    # CPP has the while evaluation at the end
-    min = 0
-    max = 1
-    step = 0.1
-    while(fabs(max - min) > 1e-10):
-        min = nk
-        max = nk
-
-        # nsum loop - until rms doesn't decrease since last loop
-        while(True):
-            min = nk - step
-            sat = delta_el(sat, nn=min)
-            # sat.delta_el(sat.jd, ii, om, ec, ww, ma, min, bstar)    # FIXME python-SGP4
-            nsum = find_rms(sat, rd, ll, odata)
-            if (nsum < sum):
-                nk = min
-                sum = nsum
-                continue # back to top of nsum loop
-            break # Go forward to xsum loop
-
-        # xsum loop - until rms doesn't decrease since last loop
-        while(True):
-            max = nk + step
-            sat = delta_el(sat, nn=max)
-            # sat.delta_el(sat.jd, ii, om, ec, ww, ma, max, bstar)    # FIXME python-SGP4
-            xsum = find_rms(sat, rd, ll, odata)
-            if (xsum < sum):
-                nk = max
-                sum = xsum
-                continue
-            break
-        step /= 2
-    nn = nk
-    return sat # nn (mean motion) is incorporated in the last update for the sat variable.
-
-
-# TODO: move to C-accelerated module
-def node_search(satx, rd, ll, odata, sum, imax, imin, omax, omin):
-    """ partition search on node and inclination within set limits """
-    global xi   # FIXME - Hold ii constant to user-specified value?  Gets set in incl()
-    xi_set = xi # Optimization, don't use globals in loops
-
-    ii = satx.inclo / de2ra
-    om = satx.nodeo / de2ra
-
-    # satx = copy.deepcopy(sat)   # Working with the copy might not be necessary
-    while((imax - imin) > 1e-5):
-        istep = (imax - imin) / 20
-        ostep = fabs(rtw(omax, omin) / 20)
-
-        if (xi_set): # FIXME: to have the effect of running the for and while loops once for the fixed imin value
-            imin  = ii
-            imax  = ii + 1e-6
-            istep = 10*imin
-        for ik in np.arange(imin, imax, istep):
-            for ok in np.arange(omin, omax, ostep):
-                delta_el(satx, ii=ik, om=ok)
-                # satx(tle, ik, ok, ec, ww, ma, nn, bstar); # FIXME SGP4
-
-                # establish the computed ra, dc, at jdo with no perturbations
-                rms = find_rms(satx, rd, ll, odata)
-                if (rms < sum):
-                    sum = rms
-                    ii  = ik
-                    om  = ok
-            # END for ok
-        # END for ik
-        imin = ii - istep
-        imax = ii + istep
-        omin = om - ostep
-        omax = om + ostep
-    # om = fmod(om, 360)
-    satx = delta_el(satx, ii=ii, om=om)
-    # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar) # FIXME python-SGP4
-    return satx
-
-
-# TODO: move to C-accelerated module
-def perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin):
-    """ partition search on perigee and eccentricity 
-    
-    Global variables used:
-        uu      longitude
-        xe      flag
-        xn      flag
-        xw      flag
-    """
-    # global xe
-    # global xn
-    # global xw
-    # global nsum
-    # global xsum
-    # global estep
-    # global wstep
-
-    xe = 0
-    xn = 0
-    xw = 0
-
-    # satx = copy.deepcopy(sat)
-
-    # Grab the values we're searching for in the loop, in case we don't find a new optimal
-    ec  = sat.ecco
-    ww  = sat.argpo/de2ra
-    ma  = sat.mo/de2ra
-
-    if (sat.ecco > 0.1):
-        wmax = sat.argpo/de2ra + 0.1
-        wmin = sat.argpo/de2ra - 0.1
-        emax = sat.ecco * 1.01
-        emin = sat.ecco * 0.99
-
-    # rms_time = 0
-    # dl_time = 0
-    # lc = 0
-    while((wmax - wmin) > 1e-5):
-        estep = (emax - emin) / 20
-        wstep = (wmax - wmin) / 20
-        for wk in np.arange(wmin, wmax, wstep):
-            if (xw):
-                wmin  = sat.argpo/de2ra
-                wmax  = sat.argpo/de2ra
-                wk    = sat.argpo/de2ra
-                wstep = 0
-            theta = radians(uu - wk)    # FIXME global (uu)
-            for ek in np.arange(emin, emax, estep):
-                if (xe):
-                    emin  = sat.ecco
-                    emax  = sat.ecco
-                    ek    = sat.ecco
-                    estep = 0
-                e = acose((ek + cos(theta)) / (1 + ek * cos(theta)))
-                if (theta > pi):
-                    e = 2 * pi - e
-                mk = e - ek * sin(e)
-                mk = degrees(mk)
-                # satx = copy.deepcopy(sat)
-                # lc+=1
-                # t_start = time()
-                sat = delta_el(sat, ec=ek, ww=wk, ma=mk)
-                # t_end = time()
-                # dl_time += (t_end-t_start)
-
-                # satx(sat.jd, ii, om, ek, wk, mk, nn, bstar) # FIXME python-SGP4
-                # establish the computed ra, dc, at jdo with no perturbations
-                # t_start = time()
-                rms = find_rms(sat, rd, ll, odata)
-                # t_end = time()
-                # rms_time += (t_end-t_start)
-                if (rms < sum):
-                    sum = rms
-                    ec  = ek
-                    ww  = wk
-                    ma  = mk
-            # END for ek
-        # END for wk
-
-        # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar) # FIXME python-SGP4
-        # Could save a call here by checking for the existence of the variables, but what's one more time?
-        sat = delta_el(sat, ec=ec, ww=ww, ma=ma)
-
-        wmax = sat.argpo/de2ra + wstep
-        wmin = sat.argpo/de2ra - wstep
-        emax = sat.ecco + estep
-        emin = sat.ecco - estep
-               
-    # print()
-    # # print("PS: {} loop iterations".format(lc))
-    # print("                  PS: find_rms: {:.2f}".format(rms_time))
-    # print("                  PS: delta_el: {:.2f}".format(dl_time))
-
-    # update mean_anomaly
-    # 0.01685786247253418
-    sat = anomaly_search(sat, rd, ll, odata, sum)
-    # sat = delta_el(sat, xmo=radians(ma)) # Not needed from the last step of above
-    # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar) # FIXME python-SGP4
-
-    # update mean_motion
-    if (not xn):
-        # motion_search: 0.030543804168701172
-        sat = motion_search(sat, rd, ll, odata)
-        # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar) # FIXME python-SGP4
-
-    # calculate uu, degrees
-    uu = longitude(sat)
-
-    # ww = fmod(degrees(sat.argpo), 360)
-    # ma = fmod(degrees(sat.mo), 360)
-    return sat
 
 def align(sat, rd, ll, odata):
     """ sets deltaT error at last obs epoch to zero """
@@ -2175,95 +1539,6 @@ def discover(sat, rd, ll, odata):       # partition search
 
     srch = 'Z' # FIXME, this is probably a global
     return sat
-
-
-# TODO: move to C-accelerated module
-def step(sat, rd, ll, odata, sum, uu, step_type):       # partition search within limits set below
-    global srch # FIXME: Get rid of this global
-
-    nobs = len(odata)
-    last_rms = sum
-    # update mean_anomaly
-    sat = anomaly_search(sat, rd, ll, odata, sum)
-
-    # sat = delta_el(sat, xmo=radians(ma)) # Not needed, as latest ma returned from above
-    # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-
-    emax = sat.ecco * 1.1
-    emin = sat.ecco * 0.9
-    wmax = sat.argpo / de2ra + 2
-    wmin = sat.argpo / de2ra - 2
-    imax = sat.inclo / de2ra + 2
-    imin = sat.inclo / de2ra - 2
-    omax = sat.nodeo / de2ra + 2
-    omin = sat.nodeo / de2ra - 2
-
-    if (step_type not in ["L","Z"]):
-        print("\nPress Q to Quit    :\n")
-    xsum = 0
-    lc = 0
-    stp_start = time()
-    DE = 0
-    while( (fabs(sum-xsum)>1e-4) and lc <= 50 ):
-        lc+=1
-        xsum = sum
-        ps_start = time()
-        sat = perigee_search(sat, rd, ll, odata, sum, uu, wmax, wmin, emax, emin)
-        # sat = delta_el(sat, omegao=radians(ww)) # Not needed as ww is returned in sat variable from above
-        # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-        ns_start = time()
-        sat = node_search(sat, rd, ll, odata, sum, imax, imin, omax, omin)
-        # sat = delta_el(sat, xnodeo=radians(om))
-        # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-
-        de_start = time()
-        if (nobs > 3 and step_type == 'Z'):
-            sat = diff_el(sat, rd, ll, odata, sum)
-            # sat = delta_el(sat)
-            # sat.delta_el(sat.jd, ii, om, ec, ww, ma, nn, bstar)
-            de_stop = time()
-            DE = de_stop - de_start
-
-        emax = sat.ecco * 1.01
-        emin = sat.ecco * 0.99
-        wmax = sat.argpo / de2ra + 0.5
-        wmin = sat.argpo / de2ra - 0.5
-        imax = sat.inclo / de2ra + 0.5
-        imin = sat.inclo / de2ra - 0.5
-        omax = sat.nodeo / de2ra + 0.5
-        omin = sat.nodeo / de2ra - 0.5
-
-        # Shouldn't need this
-        sum = find_rms(sat, rd, ll, odata)
-
-        stp_lap = time()
-        lap = stp_lap - ps_start
-        PS = ns_start - ps_start
-        NS = de_start - ns_start
-        ELAPSED = stp_lap - stp_start
-        print("rms{:12.5f}   Lap time: {:.2f}  PS {:.2f}  NS {:.2f}  DE {:.2f}  --  Elapsed {:.1f} / {}\t".format(sum, lap, PS, NS, DE, ELAPSED, lc),end='\r')
-        sys.stdout.flush()
-
-        if (step_type not in ["L","Z"]):
-            print()
-            buf = input("    : ")
-
-            try:
-                buf = buf.strip().upper()
-                if (buf == 'Q'):
-                    break
-            except NameError:
-                continue
-
-    print()
-    # print("Step: {} loop iterations".format(lc))
-
-
-    sum = print_fit(sat, rd, ll, odata, last_rms)
-
-    srch = 'N' # FIXME: Fix this global
-    return sat
-
 
 def incl(sat, rd, ll, odata, sum):
     global srch
@@ -2811,13 +2086,6 @@ def move_epoch_to_previous_perigee(sat):
         sat.mm = posradang(sat.mm) # Use instantaneous mean element FIXME: cython SGP4 allows these to be negative sign
     sat = delta_el(sat,inclo=sat.im, nodeo=sat.Om, ecco=sat.em, argpo=sat.om, mo=sat.mm, no_kozai=sat.no_kozai, jdsatepoch=t1_jd)
     return sat
-
-
-def move_epoch_to_jd(sat,t2_jd):
-    sat = delta_t(sat,t2_jd)
-    sat = delta_el(sat,inclo=sat.im, nodeo=sat.Om, ecco=sat.em, argpo=sat.om, mo=sat.mm, no_kozai=sat.no_kozai, jdsatepoch=t2_jd)
-    return sat
-
 
 def maneuver(sat, rd, ll, odata, sum, iod_line):
     # Make a copy of original sat

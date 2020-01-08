@@ -39,16 +39,18 @@ sgp4_path = os.path.join(parentdir, "python-sgp4")
 sys.path.insert(1,sgp4_path) 
 
 try:
-    from sgp4.cpropagation import sgp4_scalar, sgp4_vector, sgp4init
+    from sgp4.cpropagation import sgp4, sgp4init
+    from satfit_accelerated import *
+    from sgp4.cmodel import Satellite
 except ImportError as e:
     print(e)
-    from sgp4.propagation import sgp4_scalar, sgp4_vector, sgp4init
-from sgp4.model import Satellite
+    from sgp4.propagation import sgp4, sgp4init
+    from sgp4.model import Satellite
 from sgp4 import earth_gravity
 
 # Our own functions
 from tle_util import TruSatellite
-from satfit_accelerated import step, find_rms, move_epoch_to_jd, longitude
+# from satfit_accelerated import step, find_rms, move_epoch_to_jd, longitude
 
 # ///////////// DECLARE GLOBAL VARIABLES ////////////////////////////////////////
 twopi = 2*pi
@@ -222,7 +224,7 @@ def initsat(TLE,gravconst="wgs72"):
         -or-    False on error
     """    
     # Initialize satrec variables, modeled after twoline2rv()
-    satrec                = Satellite()
+    satrec                = Satellite(gravconst)
 
     satrec.line0          = TLE.line0
 
@@ -231,8 +233,8 @@ def initsat(TLE,gravconst="wgs72"):
     satrec.line1          = TLE.line1
     satrec.classification = TLE.classification
     satrec.intldesg       = TLE.designation
-    satrec.epochyr        = TLE._epoch_year
-    satrec.epochdays      = TLE._epoch_day
+    satrec.epochyr        = 0 # TLE._epoch_year
+    satrec.epochdays      = 0 # TLE._epoch_day
     satrec.ndot           = TLE.mean_motion_derivative
     satrec.nddot          = TLE.mean_motion_sec_derivative
     satrec.bstar          = TLE.bstar
@@ -254,10 +256,10 @@ def initsat(TLE,gravconst="wgs72"):
     # Derived quantities
     satrec.jdsatepoch     = TLE.jdsatepoch     # Julian date
     satrec.jdSGP4epoch    = satrec.jdsatepoch - 2433281.5
-    satrec.epoch_datetime = TLE.epoch_datetime # Python datetime
+    # satrec.epoch_datetime = TLE.epoch_datetime # Python datetime
 
     # Pass the source tle_id through the SGP4 class variable, for TLE genealogy
-    satrec.parent_tle_id = TLE.tle_id
+    satrec.parent_tle_id = 0 # int(TLE.tle_id)
 
     # SGP4 mode variables
     satrec.operationmode  = u'i' # Unicode for cython
@@ -270,9 +272,9 @@ def initsat(TLE,gravconst="wgs72"):
     else:
         # Most popular const used by TLEs
         whichconst = earth_gravity.wgs72
-    satrec.whichconst     = whichconst  # Python extension: remembers its consts
-
-    rtn_code = sgp4init(satrec.whichconst, satrec.operationmode, satrec.satnum, 
+    # satrec.whichconst     = whichconst  # Python extension: remembers its consts
+    # satrec.whichconst = gravconst
+    rtn_code = sgp4init("wgs72", satrec.operationmode, satrec.satnum, 
              satrec.jdSGP4epoch, # epoch time in days from jan 0, 1950. 0 hr
              satrec.bstar, satrec.ndot, satrec.nddot, satrec.ecco, satrec.argpo, 
              satrec.inclo, satrec.mo, satrec.no_kozai, satrec.nodeo, satrec)
@@ -343,6 +345,45 @@ def main():
     with open('satfit_performance.pickle', 'rb') as f:
         (odata, ll, rd, t1) = pickle.load(f)
 
+    odata = [[2.45871561e+06, 1.55664956e+00, 1.24212334e+00, 4.17200000e+03, 4.08299000e+05],
+ [2.45872254e+06, 1.54232514e+00, 9.74737447e-01, 4.17200000e+03, 4.11181000e+05],
+ [2.45872254e+06, 1.59489793e+00, 9.67111755e-01, 4.17200000e+03, 4.11182000e+05],
+ [2.45872254e+06, 1.66383389e+00, 9.55289479e-01, 4.17200000e+03, 4.11183000e+05],
+ [2.45874841e+06, 3.47627697e+00, 9.32449088e-01, 4.17200000e+03, 4.16464000e+05],
+ [2.45874841e+06, 3.41200155e+00, 9.48135077e-01, 4.17200000e+03, 4.16465000e+05],
+ [2.45874841e+06, 3.34725501e+00, 9.61012729e-01, 4.17200000e+03, 4.16466000e+05],
+ [2.45879826e+06, 4.25884112e+00, 1.15787821e+00, 4.17200000e+03, 4.21414000e+05],
+ [2.45879826e+06, 4.35459538e+00, 1.16465128e+00, 4.17200000e+03, 4.21415000e+05],
+ [2.45879826e+06, 4.43039711e+00, 1.16798418e+00, 4.17200000e+03, 4.21416000e+05]]
+
+    ll = [[ 0.00456624,  0.32275503,  0.94647152],
+ [ 0.01598115,  0.56115783,  0.82755452],
+ [-0.01368066,  0.56751477,  0.82324955],
+ [-0.05363986,  0.57487537,  0.81648091],
+ [-0.5628066,  -0.19572568,  0.80308168],
+ [-0.5620066,  -0.15578733,  0.8123293 ],
+ [-0.56062117, -0.11695225,  0.81977197],
+ [-0.17582553, -0.36071339,  0.91595373],
+ [-0.13835716, -0.37005179,  0.91865063],
+ [-0.10908354, -0.37652389,  0.91996225]]
+
+    rd = [[ 0.59544982,  0.14061455,  0.78833855],
+ [ 0.60865287, -0.06224648,  0.78833855],
+ [ 0.60868465, -0.06193494,  0.78833855],
+ [ 0.60872963, -0.06149125,  0.78833855],
+ [ 0.55200408, -0.26386443,  0.78833855],
+ [ 0.55219627, -0.26346199,  0.78833855],
+ [ 0.55238828, -0.26305917,  0.78833855],
+ [ 0.52008562, -0.32224818,  0.78833855],
+ [ 0.52024938, -0.32198372,  0.78833855],
+ [ 0.52036712, -0.32179341,  0.78833855]]
+
+
+    # print(type(odata))
+    # print(type(ll))
+    # print(type(rd))
+    # print(type(t1))
+
     # REFERENCE TLE
     line0 = 'SL-16 R/B'
     line1 = '1 22285U 92093B   19314.09990558 -.00000000  00000-0  24310-4 0  9990'
@@ -355,6 +396,17 @@ def main():
     # // calculate uu, degrees, for search
     uu = longitude(sat)
 
+    rd = np.array([[0.59544982, 0.14061455, 0.78833855], [0.60865287, -0.06224648, 0.78833855], [0.60868465, -0.06193494, 0.78833855], [0.60872963, -0.06149125, 0.78833855], [0.55200408, -0.26386443, 0.78833855], [0.55219627, -0.26346199, 0.78833855], [0.55238828, -0.26305917, 0.78833855], [0.52008562, -0.32224818, 0.78833855], [0.52024938, -0.32198372, 0.78833855], [0.52036712, -0.32179341, 0.78833855]],dtype=np.double)
+    ll = np.array([[0.00456624, 0.32275503, 0.94647152], [0.01598115, 0.56115783, 0.82755452], [-0.01368066, 0.56751477, 0.82324955], [-0.05363986, 0.57487537, 0.81648091], [-0.5628066, -0.19572568, 0.80308168], [-0.5620066, -0.15578733, 0.8123293], [-0.56062117, -0.11695225, 0.81977197], [-0.17582553, -0.36071339, 0.91595373], [-0.13835716, -0.37005179, 0.91865063], [-0.10908354, -0.37652389, 0.91996225]]
+,dtype=np.double)
+    odata = np.array([[2458715.61, 1.55664956, 1.24212334, 4172.0, 408299.0], [2458722.54, 1.54232514, 0.974737447, 4172.0, 411181.0], [2458722.54, 1.59489793, 0.967111755, 4172.0, 411182.0], [2458722.54, 1.66383389, 0.955289479, 4172.0, 411183.0], [2458748.41, 3.47627697, 0.932449088, 4172.0, 416464.0], [2458748.41, 3.41200155, 0.948135077, 4172.0, 416465.0], [2458748.41, 3.34725501, 0.961012729, 4172.0, 416466.0], [2458798.26, 4.25884112, 1.15787821, 4172.0, 421414.0], [2458798.26, 4.35459538, 1.16465128, 4172.0, 421415.0], [2458798.26, 4.43039711, 1.16798418, 4172.0, 421416.0]]
+,dtype=np.double)
+
+    # print(type(rd))
+    # print(type(ll))
+    # print(type(odata))
+    print(type(sat))
+    print(sat)
     start_rms = find_rms(sat, rd, ll, odata) # Establish baseline rms for global
     print(f"Start rms: {start_rms}")
 
