@@ -1,5 +1,4 @@
 Cython
 numpy
-spacetrack # Not really needed, but imported by tle_util.py
-#Install this seperately from git clone
-#git+https://github.com/interplanetarychris/python-sgp4@7-dec-15-vallado-tsince-vectorize
+spacetrack
+python-sgp4>=2.7

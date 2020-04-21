@@ -1,4 +1,4 @@
-# cython: boundscheck=False, wraparound=False, nonecheck=False, language_level=3, cdivision=True, profile=False
+# cython: boundscheck=False, wraparound=False, nonecheck=False, language_level=3, cdivision=True, profile=False, embedsignature=True
 from __future__ import print_function
 from __future__ import division         # Eliminate need for decimals on whole values
 

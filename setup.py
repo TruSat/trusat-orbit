@@ -5,13 +5,14 @@ import numpy as np
 # https://setuptools.readthedocs.io/en/latest/setuptools.html#declaring-extras-optional-features-with-their-own-dependencies
 
 extensions = [
-  Extension('caccelerated',
+  Extension('trusat/caccelerated',
             sources=['trusat/caccelerated.pyx'],
             include_dirs=[np.get_include()],
             extra_compile_args=['-O3','-ffast-math','-march=native'],
   ),
-  Extension('profile',
+  Extension('trusat/profile',
             sources=['trusat/profile.pyx'],           
+            optional='optional',
             include_dirs=[np.get_include(), '/usr/local/include'],
             libraries=["m"],
             extra_compile_args=['-O3','-ffast-math','-march=native','-fopenmp','-I/usr/local/opt/llvm/include'],
@@ -37,13 +38,16 @@ setup(
         "Learning Hub" : "https://learn.trusat.org/docs/start-here",
         "Forums" : "https://discuss.trusat.org/"
     },
-    packages=find_packages(),
+    packages=['trusat'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
-    ext_modules=cythonize(extensions,compiler_directives={'embedsignature': True}),
-    package_dir = {'trusat' : 'trusat'},
+    ext_modules=cythonize(extensions),
+    # install_requires=[
+    #     'database==0.0',
+    # ],
+    # dependency_links = ['git+https://github.com/TruSat/trusat-backend@dev.chris#egg=database-0.0']
 )

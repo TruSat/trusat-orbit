@@ -52,7 +52,7 @@ except ImportError as e:
     from sgp4.model import Satellite
 from sgp4 import earth_gravity
 
-import trusat.iod as iod
+import trusat.iod
 
 from trusat.tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetime_from_tle_fmt, assumed_decimal_point, checksum_tle_line, TruSatellite, make_tle_from_SGP4_satrec
 

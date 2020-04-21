@@ -33,8 +33,8 @@ from getpass import getpass
 from spacetrack import SpaceTrackClient
 
 # Global variables
-twopi = 2*pi
-nocon = twopi/1440.0
+TWOPI = 2*pi
+NOCON = TWOPI/1440.0
 
 
 """ TODOs:
@@ -899,7 +899,7 @@ def make_tle_from_SGP4_satrec(satrec, satmeta, classification="T"):
         TLE         tle_util TruSatellite() Class variable (with TLE lines)
     """
     # Import this at the time of need
-    from caccelerated import jday_to_datetime
+    from trusat.caccelerated import jday_to_datetime
 
     TLE = TruSatellite()
 
@@ -925,7 +925,7 @@ def make_tle_from_SGP4_satrec(satrec, satmeta, classification="T"):
     TLE.arg_perigee_radians	            = satrec.argpo
     TLE.mean_anomaly_degrees            = degrees(satrec.mo)
     TLE.mean_anomaly_radians            = satrec.mo
-    TLE.mean_motion_orbits_per_day      = satrec.no_kozai / nocon
+    TLE.mean_motion_orbits_per_day      = satrec.no_kozai / NOCON
     TLE.mean_motion_radians_per_minute  = satrec.no_kozai
     TLE.mean_motion_radians_per_second  = satrec.no_kozai / 60
     TLE.orbit_number			        = satmeta.revnum     # TODO: May need to calculate this based on period and time from epoch
