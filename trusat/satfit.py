@@ -65,7 +65,7 @@ backend_path = os.path.join(parentdir, "../trusat-backend")
 sys.path.insert(1,backend_path) 
 import database
 
-from elfind import SGN, so2r
+from .elfind import SGN, so2r
 
 ####### DECLARE GLOBAL CONSTANTS #######
 TWOPI = 2*pi

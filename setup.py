@@ -5,12 +5,12 @@ import numpy as np
 # https://setuptools.readthedocs.io/en/latest/setuptools.html#declaring-extras-optional-features-with-their-own-dependencies
 
 extensions = [
-  Extension('trusat/caccelerated',
+  Extension('caccelerated',
             sources=['trusat/caccelerated.pyx'],
             include_dirs=[np.get_include()],
             extra_compile_args=['-O3','-ffast-math','-march=native'],
   ),
-  Extension('trusat/profile',
+  Extension('profile',
             sources=['trusat/profile.pyx'],           
             optional='optional',
             include_dirs=[np.get_include(), '/usr/local/include'],
