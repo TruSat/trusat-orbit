@@ -8,7 +8,7 @@ if sys.version_info[0] != 3 or sys.version_info[1] < 6:
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from math import asin, sin, cos, atan2
 
@@ -561,6 +561,8 @@ def DateTime_frompacked(DateTimeString,format_type="IOD"):
 	IOD:  YYYYMMDDHHMMSSsss
 	UK:     YYMMDDHHMMSSssss
 	RDE:    YYMMDDHHMMSS.ss
+
+	Also, deal with cases where users provide rounded-up/over-the-max values for HH:MM:SS fields.
 	"""
 	# Parse YEAR ourselves, as datetime works on a 2000-year boundary, whereas TLE dates work on a [19,20]57 year boundary
 	if (format_type in ["RDE","UK"]):
@@ -577,14 +579,38 @@ def DateTime_frompacked(DateTimeString,format_type="IOD"):
 	# Deal with decimal point in RDE format
 	if (format_type == "RDE"):
 		if (DateTimeString[14]=="."):
-			SUBSECS = DateTimeString[15:].rstrip()
-			MICROSECONDS = right_zero_pad(SUBSECS,6)
-			DateTimeString = DateTimeString[:14] + MICROSECONDS
+			SUBSEC = DateTimeString[15:].rstrip()
+			MICROSECOND = right_zero_pad(SUBSEC,6)
+			DateTimeString = DateTimeString[:14] + MICROSECOND
 		else:
 			DateTimeString = DateTimeString[:14] + "000000"
 
+	YEAR   = int(DateTimeString[0:4])
+	MONTH  = int(DateTimeString[4:6])
+	DAY    = int(DateTimeString[6:8])
+	HOUR   = int(DateTimeString[8:10])
+	MINUTE = int(DateTimeString[10:12])
+	SECOND = int(DateTimeString[12:14])
+	MICROSECOND = int(DateTimeString[14:20])
+
+	# Handle inputs with more than the maximum than datetime.strptime() can handle
+	# This is fromt the users' software rounding up
+	carry_over_time = 0
+	if (SECOND > 59):
+		carry_over_time += 60
+		SECOND -= 60
+	if (MINUTE > 59):
+		carry_over_time += 60*60
+		MINUTE -= 60
+	if (HOUR > 23):
+		carry_over_time += 24*60*60
+		HOUR -= 24
+
+	DateTimeString = f"{YEAR:04d}{MONTH:02d}{DAY:02d}{HOUR:02d}{MINUTE:02d}{SECOND:02d}{MICROSECOND:06d}"
+
 	formatstring = '%Y%m%d%H%M%S%f'
 	DateTimeUnpacked = datetime.strptime(DateTimeString,formatstring)
+	DateTimeUnpacked = DateTimeUnpacked + timedelta(seconds=carry_over_time)
 
 	return DateTimeUnpacked
 
@@ -657,7 +683,7 @@ class IOD:
 #iod_format_re = re.compile ('^(\d{5}\s\d{2}\s\d{3}\D*)*\s{1,16}(\d{4}\s)(\D)\s(\d{8})(\d{0,9}$|\d{0,9}\s+\d\d.*)')
 
 # This one catches all the good lines, and lets a ones with invalid VMAG/FLASH data through
-# More description here: https://regex101.com/r/KfaY7g/2
+# More description here: https://regex101.com/r/sevtPF/1
 new_iod_format_re = re.compile(r"""
     ^	# Start at beginning of string
     (	# BEGIN NORAD/INTL DES GROUP 
@@ -667,7 +693,7 @@ new_iod_format_re = re.compile(r"""
 	    (?=[A-Z]+\s*)[\D\s]{3}(?<!\s\w)\s
 	    |\s{16}	# Or match empty from beginning for 16 characters
 	)	# END NORAD/INTL DES GROUP 
-    \d{4}\s			# Station
+    [0-9A-HJ-NP-Z]{4}\s	# Station
     [EGFPBTCO ]\s	# Station status code
     [\d+]{8}			# YYYYMMDD
     (               # BEGIN optional remaining data GROUP
@@ -722,9 +748,9 @@ However, it is superior for the following reason:
 # uk_format_re = re.compile('^(?=\d+[ ]*?)[\d ]{24}(?=\d)[ \d]{3}') # pylint: disable=anomalous-backslash-in-string
 # uk_format_re = re.compile('^(\d{17})') # pylint: disable=anomalous-backslash-in-string
 
-# More description here: https://regex101.com/r/cClI0V/3
+# More description here: https://regex101.com/r/YUKMjI/1
 new_uk_format_re = re.compile (r"""
-	^(\d{17})				# Intl Desig, Site Number, Date string
+	^(\d{7}[0-9A-HJ-NP-Z]{4}\d{6})	# Intl Desig, Site Number, Date string
 	(?=\d[\d\s]{9}).{10}	# Time of observation, must start with at least one digit, digits and spaces can follow
 	(?=[\d\s]{5}).{5}		# Time accuracy, can be all blank
 	([1-3]					# Time Standard code, 1-3 valid
@@ -752,13 +778,13 @@ def format_test_uk(line=False):
 		return False
 
 # Previous version (currently in use due to https://github.com/consensys-space/trusat-orbit/issues/5) for revert if necessary
-rde_format_re = re.compile('\d{4}\s\d{4}\s(?=\d.\d*[ ]*)[\d. ]{4}\d\s\d{3}[0-6]\n(^\d{2}\n(^\d{7}\s\d{6}.\d{2}\s\d{6}[-+ ]\d{6}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\d.\d)[- \d.]{4}.*\n){2,}){1,}999', re.MULTILINE) # pylint: disable=anomalous-backslash-in-string
+rde_format_re = re.compile('[0-9A-HJ-NP-Z]{4}\s\d{4}\s(?=\d.\d*[ ]*)[\d. ]{4}\d\s\d{3}[0-6]\n(^\d{2}\n(^\d{7}\s\d{6}.\d{2}\s\d{6}[-+ ]\d{6}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\d.\d)[- \d.]{4}.*\n){2,}){1,}999', re.MULTILINE) # pylint: disable=anomalous-backslash-in-string
 
 # The following regex creates stalling-conditions on bulk import ref: https://github.com/consensys-space/trusat-orbit/issues/5
 # The following detects a complete RDE record block
-# https://regex101.com/r/rJRnoM/1
+# https://regex101.com/r/AINrwf/1
 new_rde_format_re_verbose = re.compile(r"""
-\d{4}\s					 # Observing site number (4 digits)
+[0-9A-HJ-NP-Z]{4}\s		 # Observing site number (4 digits)
 \d{4}\s					 # UTC Year and Month of Observation, in YYMM format
 (?=\d.\d*?\s*?)[\d. ]{3} # Time Accuracy, in seconds. Format is T.t
 [1-3]					 # Time Standard Code, 1-3 valid
@@ -784,7 +810,7 @@ new_rde_format_re_verbose = re.compile(r"""
 """,flags=re.MULTILINE|re.VERBOSE) # Need to OR flags to use multiple options
 
 # With all extraneous white space removed, as to avoid the OR'ed flags in new_rde_format_re_verbose
-new_rde_format_re_compact = re.compile(r"\d{4}\s\d{4}\s(?=\d.\d*?\s*?)[\d. ]{3}[1-3][1]\s\d{3}[0-6]\n(?:^\d{2}.*\n(?:^\d{7}\s\d{6}.\d{2}\s\d{6}[-+ ]\d{6}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\s?\d.*?\d*?)[- \d.]{3}[SIRFXE ].*\n){1,}){1,}999",re.MULTILINE)
+new_rde_format_re_compact = re.compile(r"[0-9A-HJ-NP-Z]{4}\s\d{4}\s(?=\d.\d*?\s*?)[\d. ]{3}[1-3][1]\s\d{3}[0-6]\n(?:^\d{2}.*\n(?:^\d{7}\s\d{6}.\d{2}\s\d{6}[-+ ]\d{6}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\d.\d)[- \d.]{4}(?=[- ]\s?\d.*?\d*?)[- \d.]{3}[SIRFXE ].*\n){1,}){1,}999",re.MULTILINE)
 
 # The following detects a valid data line within a RDE record block
 # https://regex101.com/r/MDKDE6/2
@@ -854,7 +880,7 @@ def parse_iod_lines(block=False):
 				IOD_line.InternationalDesignation=""
 
 			try:
-				IOD_line.Station = int(line[16:20])
+				IOD_line.Station = line[16:20]
 			except ValueError: # No point in continuing if we don't have a station to report against
 				continue
 
@@ -1025,7 +1051,7 @@ def parse_uk_lines(block=False):
 			UK_line.InternationalDesignation = str(UK_line.LaunchYear) + '-' + line[2:5] + piece_letters # FIXME: Figure out if this should have trailing space like the IOD format does
 
 			# 'Observing Site Number'
-			UK_line.Station = int(line[7:11])
+			UK_line.Station = line[7:11]
 
 			UK_line.DateTimeString = line[11:27]
 			UK_line.DateTime = DateTime_frompacked(UK_line.DateTimeString,"UK")
@@ -1185,7 +1211,7 @@ def parse_rde_record(block=False):
 		line = lines.pop(0)
 
 		# 'Observing Site Number'
-		Station = int(line[0:4])
+		Station = line[0:4]
 		YYMM = line[5:9]
 
 		try:

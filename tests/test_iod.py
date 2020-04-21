@@ -523,14 +523,14 @@ class Tests(TestCase):
         test_file = "data/tests/IOD_data_compliant.txt" 
         IODs = iod.get_iod_records_from_file(test_file)
 
-        self.assertEqual(len(IODs),46,msg="Failed to read all (46) compliant IODs")
+        self.assertEqual(len(IODs),51,msg="Failed to read all (51) compliant IODs")
 
         test_iod_string = "23794 96 010A   2701 G 20040506012614270 17 25 1100114-184298 38 I+020 10  10000 # Comments after the line here"
         IOD = iod.parse_iod_lines(test_iod_string)[0]
         self.assertEqual(IOD.ObjectNumber, 23794 ,msg="Failed ObjectNumber {}".format(IOD.ObjectNumber))
         self.assertEqual(IOD.LaunchYear, 1996 ,msg="Failed LaunchYear {}".format(IOD.LaunchYear))
         self.assertEqual(IOD.InternationalDesignation, "1996-010A  " ,msg="Failed InternationalDesignation {}".format(IOD.InternationalDesignation))
-        self.assertEqual(IOD.Station, 2701 ,msg="Failed Station {}".format(IOD.Station))
+        self.assertEqual(IOD.Station, "2701" ,msg="Failed Station {}".format(IOD.Station))
         self.assertEqual(IOD.StationStatusCode, "G" ,msg="Failed StationStatusCode {}".format(IOD.StationStatusCode))
         self.assertEqual(IOD.StationStatus, None ,msg="Failed StationStatus {}".format(IOD.StationStatus))
         self.assertEqual(IOD.DateTimeString, "20040506012614270" ,msg="Failed DateTimeString {}".format(IOD.DateTimeString))
@@ -592,7 +592,7 @@ class Tests(TestCase):
 
         obs_file = "data/tests/UK_data_compliant.txt" 
         IODs = iod.get_uk_records_from_file(obs_file)
-        self.assertEqual(len(IODs),49,msg="Failed to read all (49) compliant IODs")
+        self.assertEqual(len(IODs),52,msg="Failed to read all (52) compliant IODs")
 
         test_uk_string = "9701201201803101520195542  01   12172038  +15585   1  5             +6 +8   190R# Comments after the line here"
         # test_uk_string = "9701201201803101520195542  01   12172038  +15585   1  5             +6 +8   190R# Comments after the line here"
@@ -604,7 +604,7 @@ class Tests(TestCase):
         self.assertEqual(IOD.ObjectNumber, 0 ,msg="Failed ObjectNumber {}".format(IOD.ObjectNumber))
         self.assertEqual(IOD.LaunchYear, 1997 ,msg="Failed LaunchYear {}".format(IOD.LaunchYear))
         self.assertEqual(IOD.InternationalDesignation, "1997-012A" ,msg="Failed InternationalDesignation {}".format(IOD.InternationalDesignation))
-        self.assertEqual(IOD.Station, 2018 ,msg="Failed Station {}".format(IOD.Station))
+        self.assertEqual(IOD.Station, "2018" ,msg="Failed Station {}".format(IOD.Station))
         self.assertEqual(IOD.StationStatusCode, None ,msg="Failed StationStatusCode {}".format(IOD.StationStatusCode))
         self.assertEqual(IOD.StationStatus, None ,msg="Failed StationStatus {}".format(IOD.StationStatus))
         self.assertEqual(IOD.DateTimeString, "03101520195542  " ,msg="Failed DateTimeString {}".format(IOD.DateTimeString))
@@ -706,7 +706,18 @@ class Tests(TestCase):
             (18,  '990910123456.7 ', 'RDE', datetime(1999,9,10,12,34,56,700000) ),
             (19,  '990910123456.  ', 'RDE', datetime(1999,9,10,12,34,56,000000) ),
             (20,  '990910123456   ', 'RDE', datetime(1999,9,10,12,34,56,000000) ),
-            (21,  '9909101234',      'RDE', datetime(1999,9,10,12,34,00,000000) )
+            (21,  '9909101234',      'RDE', datetime(1999,9,10,12,34,00,000000) ),
+            # Test cases where HH:MM:SS values are rounded up by user
+            (22,'19991231235959999', 'IOD', datetime(1999,12,31,23,59,59,999000) ),
+            (23,'19991231235960999', 'IOD', datetime(2000,1,1,0,0,0,999000) ),
+            (24,'19991231236059999', 'IOD', datetime(2000,1,1,0,0,59,999000) ),
+            (25,'19991231245959999', 'IOD', datetime(2000,1,1,0,59,59,999000) ),
+            (26,  '9909101234607891', 'UK', datetime(1999,9,10,12,35,0,789100) ),
+            (27,  '990910123460.78', 'RDE', datetime(1999,9,10,12,35,0,780000) ),
+            # Test leap year cases where HH:MM:SS values are rounded up by user
+            (28,'20200229235960999', 'IOD', datetime(2020,3,1,0,0,0,999000) ),
+            (29,'20200229236059999', 'IOD', datetime(2020,3,1,0,0,59,999000) ),
+            (30,'20200229245959999', 'IOD', datetime(2020,3,1,0,59,59,999000) )
         ]
 
         for (case_no, packed, format_type, answer_time) in time_cases:

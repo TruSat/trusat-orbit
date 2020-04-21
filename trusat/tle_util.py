@@ -419,6 +419,23 @@ class TruSatellite(object):
             self.raan_degrees = self.raan_degrees = (self.raan_degrees + 180) % 360
 
 
+    def correct_value_ranges(self):
+        """ Adjust angular ranges outside of customary ranges
+
+        e.g. 0 <= var1 < 360
+             0 <= var2 < 180
+             0 <= var3 < 2 pi
+             0 <= var4 < pi
+        """
+        self.raan_degrees         = self.raan_degrees         % 360
+        self.arg_perigee_degrees  = self.arg_perigee_degrees  % 360
+        self.mean_anomaly_degrees = self.mean_anomaly_degrees % 360
+
+        if (not (0 <= self.inclination_degrees <= 180)):
+            self.inclination_degrees = self.inclination_degrees % 180
+            self.raan_degrees = self.raan_degrees = (self.raan_degrees + 180) % 360
+
+
     def derived_values(self):
         """ Calculate values which are determined from TLE parameters """
         self.epoch_string = self.epoch_datetime.isoformat(timespec='microseconds')

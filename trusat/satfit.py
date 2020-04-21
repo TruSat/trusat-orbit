@@ -33,6 +33,7 @@ import logging
 log = logging.getLogger(__name__)
 
 from spacetrack import SpaceTrackClient
+import pickle
 
 # python SGP4 from git+https://github.com/interplanetarychris/python-sgp4@cython-7-dec-15-vallado
 # Until the following pull request is approved
@@ -3374,7 +3375,7 @@ def main(db=False):
         elif (cmd == "U"):  # View the queue
             pass
         elif (cmd == "Q"):  # Quit to command line
-            sys.exit(0)
+            sys.exit()
 
         # print("{} using station {} Observing Satellite {} : {:.3f} days away from epoch".format(observer_name,station_number,satellite.model.satnum,days))
 
