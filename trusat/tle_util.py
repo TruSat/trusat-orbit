@@ -33,8 +33,8 @@ from getpass import getpass
 from spacetrack import SpaceTrackClient
 
 # Global variables
-twopi = 2*pi
-nocon = twopi/1440.0
+TWOPI = 2*pi
+NOCON = TWOPI/1440.0
 
 
 """ TODOs:
@@ -260,7 +260,7 @@ def delta_TLE(TLE1, TLE2):
     TLE.classification = TLE2.classification
     TLE.designation = TLE2.designation
     TLE.ephemeris_type = TLE2.ephemeris_type
-    TLE.element_num = TLE2.element_num
+    TLE.element_set_number = TLE2.element_set_number
     TLE.epoch_datetime = TLE2.epoch_datetime
 
     TLE.jdsatepoch = TLE2.jdsatepoch - TLE1.jdsatepoch
@@ -320,19 +320,19 @@ class TruSatellite(object):
     _XKE    = sqrt((3600.0 * _GE) / (pow(_XKMPER,3)))
 
 
-    def __init__(self, catalog=None, line0=None, line1=None, line2=None, tle_source_filename=None, tle_file_fingerprint=None, strict=True, checksum="flag"):
+    def __init__(self, catalog=None, line0=None, line1=None, line2=None, tle_source_filename=None, tle_file_fingerprint=None, strict_import=True, checksum="flag"):
         self._tle_file = tle_source_filename
         self.line0     = line0
         self.line1     = line1
         self.line2     = line2
         self.tle_file_fingerprint = tle_file_fingerprint
         self._tle_source_filename = tle_source_filename
-        self.strict    = strict
+        self.strict_import    = strict_import
         self.checksum  = checksum
 
 
         # Variables users would likely want regular access to
-        self.sat_name = self.name = None
+        self.name = None
         self.satellite_number = None
         self.classification = None  # Note: Set this to "O" (or some less ambiguous character) to indicate source?
         self.designation = None
@@ -340,7 +340,7 @@ class TruSatellite(object):
         self.mean_motion_sec_derivative = None      # TODO orbits_per day - and MKS versions
         self.bstar = None
         self.ephemeris_type = None
-        self.element_num = None
+        self.element_set_number = None
         self.line1_checksum = None
 
         self.inclination_degrees = None
@@ -401,6 +401,23 @@ class TruSatellite(object):
 
             except TLEValueError:
                 log.warning("{}: Encountered errors in processing the following TLE block:\t{}\n\t{}\n\t{}".format(self._tle_source_filename, self.line0,self.line1,self.line2))
+    
+    def correct_value_ranges(self):
+        """ Adjust angular ranges outside of customary ranges
+
+        e.g. 0 <= var1 < 360
+             0 <= var2 < 180
+             0 <= var3 < 2 pi
+             0 <= var4 < pi
+        """
+        self.raan_degrees         = self.raan_degrees         % 360
+        self.arg_perigee_degrees  = self.arg_perigee_degrees  % 360
+        self.mean_anomaly_degrees = self.mean_anomaly_degrees % 360
+
+        if (not (0 <= self.inclination_degrees <= 180)):
+            self.inclination_degrees = self.inclination_degrees % 180
+            self.raan_degrees = self.raan_degrees = (self.raan_degrees + 180) % 360
+
 
     def correct_value_ranges(self):
         """ Adjust angular ranges outside of customary ranges
@@ -442,6 +459,10 @@ class TruSatellite(object):
         if (self.designation and not self._id_launch_year):
             try:
                 self._id_launch_year = int(self.designation[2:4])
+                if (self._id_launch_year >= 57):
+                    self._id_launch_year = 1900 + self._id_launch_year
+                elif (self._id_launch_year < 57):
+                    self._id_launch_year = 2000 + self._id_launch_year
             except ValueError:
                 self._id_launch_year = None
         if (self.designation and not self._id_launch_num):
@@ -470,14 +491,14 @@ class TruSatellite(object):
         """Parse fields in TLE data"""
 
         # Parse line 0
-        self.name_long = self.line0[0:24].rstrip()
-        self.name_long  = re.sub("^0 ", "", self.name_long)
+        self.name = self.line0[0:24].rstrip()
+        self.name  = re.sub("^0 ", "", self.name)
 
         # Parse line 1
         try:
             self.satellite_number = int(self.line1[2:7])
         except ValueError:
-            log.warning("{}: TLE Sat # NaN for {}".format(self._tle_source_filename, self.name_long))
+            log.warning("{}: TLE Sat # NaN for {}".format(self._tle_source_filename, self.name))
             self.tle_good = False
  
         self.classification  = self.line1[7]
@@ -505,14 +526,14 @@ class TruSatellite(object):
                     self._id_launch_year = 2000 + self._id_launch_year
             except ValueError:
                 log.warning("{}: TLE Launch year NaN for {}".format(self._tle_source_filename, self.satellite_number))
-                if(self.strict):
+                if(self.strict_import):
                     self.tle_good = False
 
             try:
                 self._id_launch_num   = int(self._id_launch_num)
             except ValueError:
                 log.warning("{}: TLE Launch number NaN for {}".format(self._tle_source_filename, self.satellite_number))
-                if(self.strict):
+                if(self.strict_import):
                     self.tle_good = False
 
             else:
@@ -524,7 +545,7 @@ class TruSatellite(object):
                 except AssertionError: 
                     # This is a real error (and not an analyst object) if we're this far...
                     log.warning("{}: TLE invalid characters in launch piece field\n\t{}".format(self._tle_source_filename, self.line1))
-                    if(self.strict):
+                    if(self.strict_import):
                         self.tle_good = False
 
                 try:
@@ -533,7 +554,7 @@ class TruSatellite(object):
                                                                     self._id_launch_piece_letter)
                     self.designation = designation.rstrip()
                 except (ValueError):
-                    if(self.strict):
+                    if(self.strict_import):
                         self.tle_good = False
                     else:
                         self.designation = self.line1[ 9:17].rstrip()
@@ -550,7 +571,7 @@ class TruSatellite(object):
             self.ephemeris_type = int(self.line1[62])
         except ValueError:
             self.ephemeris_type = 0
-        self.element_num  = int(self.line1[64:68])
+        self.element_set_number  = int(self.line1[64:68])
 
         # Parse line 2
         # Figure out where to do the error / type checking on these
@@ -569,9 +590,10 @@ class TruSatellite(object):
         #  Angles in radians
         #  Angle rates in radians per _minute_
         #  epoch time in days from jan 0, 1950. 0 hr
-        self.satrec = [self.satellite_number, self.jdSGP4epoch, self.bstar, self.eccentricity, 
-                       self.arg_perigee_radians, self.inclination_radians, self.mean_anomaly_radians, 
-                       self.mean_motion_radians_per_minute, self.raan_radians]
+        # (This apparently is not being used)
+        # self.satrec = [self.satellite_number, self.jdSGP4epoch, self.bstar, self.eccentricity, 
+                    #    self.arg_perigee_radians, self.inclination_radians, self.mean_anomaly_radians, 
+                    #    self.mean_motion_radians_per_minute, self.raan_radians]
 
 
     def _checksum_tle(self):
@@ -653,9 +675,10 @@ class TruSatellite(object):
 
         # Analyst objects do not have designation data
         try:
+            launch_year = self._id_launch_year - 2000 if (self._id_launch_year>2000) else self._id_launch_year - 1900
             packed_designation = "{LAUNCH_YEAR:02d}{LAUNCH_NUM:03d}{LAUNCH_PIECE_LETTER:<3s}".format(
-                LAUNCH_YEAR = self._id_launch_year,
-                LAUNCH_NUM  = self._id_launch_num,
+                LAUNCH_YEAR = launch_year,
+                LAUNCH_NUM = self._id_launch_num,
                 LAUNCH_PIECE_LETTER = self._id_launch_piece_letter)
         except TypeError:
             packed_designation = ""
@@ -674,7 +697,7 @@ class TruSatellite(object):
             tle_fmt_decimal_pack(self.mean_motion_sec_derivative),
             tle_fmt_decimal_pack(self.bstar),
             self.ephemeris_type,
-            tle_fmt_int(self.element_num,digits=4)
+            tle_fmt_int(self.element_set_number,digits=4)
             )
 
         line2 = "2 {:05d} {:8.4f} {:8.4f} {:7s} {:8.4f} {:8.4f} {:11.8f}{:5s}00".format(
@@ -702,17 +725,17 @@ class TLEFile(object):
         Note: This method of key-association will only store the first record for each NORAD-id it finds in the file.
     """
 
-    def __init__(self, tle_file, strict=True, parse=True):
+    def __init__(self, tle_file, strict_import=True, parse=True):
         self.tle_file = tle_file
         self._tle_fd = None                 # TLE file descriptor
         self.tle_file_fingerprint = None
         self._TLEs = []
-        self.strict = strict
+        self.strict_import = strict_import
         self.parse = parse
         self._tle_basename = os.path.basename(self.tle_file)
         self.Satellites = {}
 
-        if (strict):
+        if (self.strict_import):
             # FROM: https://www.orekit.org/static/jacoco/org.orekit.propagation.analytical.tle/TLE.java.html
             self._tle_line1_re = re.compile ('^1 [ 0-9]{5}[A-Z] [ 0-9]{5}[ A-Z]{3} [ 0-9]{5}[.][ 0-9]{8} (?:(?:[ 0+-][.][ 0-9]{8})|(?: [ +-][.][ 0-9]{7})) [ +-][ 0-9]{5}[+-][ 0-9] [ +-][ 0-9]{5}[+-][ 0-9] [ 0-9] [ 0-9]{4}[ 0-9]')
             self._tle_line2_re = re.compile ('^2 [ 0-9]{5} [ 0-9]{3}[.][ 0-9]{4} [ 0-9]{3}[.][ 0-9]{4} [ 0-9]{7} [ 0-9]{3}[.][ 0-9]{4} [ 0-9]{3}[.][ 0-9]{4} [ 0-9]{2}[.][ 0-9]{13}[ 0-9]')
@@ -769,15 +792,15 @@ class TLEFile(object):
                 match1 = self._tle_line1_re.search(l1)                    
                 match2 = self._tle_line2_re.search(l2)
 
-                if (match1 and match2 and self.strict):
+                if (match1 and match2 and self.strict_import):
                     (name, line1, line2) = _line012(l0, l1, l2)
                     tlecount += 1
                     self._TLEs.append([name,line1,line2])
-                elif ((simplematch1 and simplematch2) and not self.strict):
+                elif ((simplematch1 and simplematch2) and not self.strict_import):
                     (name, line1, line2) = _line012(l0, l1, l2)
                     tlecount += 1
                     self._TLEs.append([name,line1,line2])
-                elif ( (self.strict and simplematch1 and simplematch2) and (match1==None or match2==None)):
+                elif ( (self.strict_import and simplematch1 and simplematch2) and (match1==None or match2==None)):
                     if not (match1 or match2):
                         log.warning("{}: Strict record structure checks failed for both TLE lines at file line: {}".format(self._tle_basename,tlefileline))
                         log.info("  {}\n  {}\n  {}\n".format(l0,l1,l2))
@@ -792,7 +815,7 @@ class TLEFile(object):
 
                 l0 = l1
                 l1 = l2
-        log.info("Read {} TLEs".format(tlecount))
+        log.info("Read {} TLEs from {}".format(tlecount,self.tle_file))
 
 
     # TODO: Consider calling this parse_tles_unique, and storing only the most recent record provided
@@ -881,7 +904,7 @@ def make_tle(*, name="None", ssn, desig="0000000", epoch_datetime, xincl, xnodeo
 
 
 # TODO: Carefully consider if it makes sense to make classification="T" the default - if 3rd parties are calling this, do we want to "own it"?
-def make_tle_from_SGP4_satrec(satrec, classification="T"):
+def make_tle_from_SGP4_satrec(satrec, satmeta, classification="T"):
     """ Make TLE record from python-SGP4 satrec variable
 
     Classification defaults to "T" (for TruSat) unless otherwise specified
@@ -892,20 +915,24 @@ def make_tle_from_SGP4_satrec(satrec, classification="T"):
     Output:
         TLE         tle_util TruSatellite() Class variable (with TLE lines)
     """
+    # Import this at the time of need
+    from trusat.caccelerated import jday_to_datetime
+
     TLE = TruSatellite()
 
-    TLE.line0 = satrec.line0
+    # FIXME - re-derive the TLE line?
+    # TLE.line0 = satrec.line0
 
-    TLE.sat_name = TLE.name	            = re.sub("^0 ", "", satrec.line0)
+    TLE.name            	            = re.sub("^0 ", "", satmeta.line0)
     TLE.satellite_number	            = satrec.satnum
     TLE.classification		            = classification  
-    TLE.designation			            = satrec.intldesg
-    TLE.epoch_datetime	                = satrec.epoch_datetime
+    TLE.designation			            = satmeta.intldesg
+    TLE.epoch_datetime	                = jday_to_datetime(satrec.jdsatepoch, satrec.jdsatepochF)
     TLE.mean_motion_derivative		    = satrec.ndot
     TLE.mean_motion_sec_derivative	    = satrec.nddot
     TLE.bstar			                = satrec.bstar
-    TLE.ephemeris_type	                = satrec.ephtype
-    TLE.element_set_number	            = satrec.elnum
+    TLE.ephemeris_type	                = satmeta.ephtype
+    TLE.element_set_number	            = satmeta.elnum
     TLE.inclination_degrees             = degrees(satrec.inclo)
     TLE.inclination_radians	            = satrec.inclo
     TLE.raan_degrees		            = degrees(satrec.nodeo)
@@ -915,10 +942,10 @@ def make_tle_from_SGP4_satrec(satrec, classification="T"):
     TLE.arg_perigee_radians	            = satrec.argpo
     TLE.mean_anomaly_degrees            = degrees(satrec.mo)
     TLE.mean_anomaly_radians            = satrec.mo
-    TLE.mean_motion_orbits_per_day      = satrec.no_kozai / nocon
+    TLE.mean_motion_orbits_per_day      = satrec.no_kozai / NOCON
     TLE.mean_motion_radians_per_minute  = satrec.no_kozai
     TLE.mean_motion_radians_per_second  = satrec.no_kozai / 60
-    TLE.orbit_number			        = satrec.revnum     # TODO: May need to calculate this based on period and time from epoch
+    TLE.orbit_number			        = satmeta.revnum     # TODO: May need to calculate this based on period and time from epoch
     """ Further notes on Rev number:
     From: https://www.celestrak.com/columns/v04n03/#FAQ02
     The period from launch to the first ascending node is considered to be Rev 0 and Rev 1 begins when the first ascending node is reached. 
