@@ -15,7 +15,7 @@ from math import asin, sin, cos, atan2
 import logging
 log = logging.getLogger(__name__)
 
-from trusat.tle_util import launch_piece_letter_to_number, assumed_decimal_point
+from .tle_util import launch_piece_letter_to_number, assumed_decimal_point
 
 # REGEXP for valid angle string format with content
 # Note that the columns containing the angle format are evaluated for validity with these REGEX

@@ -30,7 +30,7 @@ if sys.version_info[0] != 3 or sys.version_info[1] < 6:
 # sgp4_path = os.path.join(parentdir, "python-sgp4")
 # sys.path.insert(1,sgp4_path) 
 
-import trusat.caccelerated as tsc
+from . import caccelerated as tsc
 
 from sgp4.propagation import sgp4, sgp4init
 from sgp4.api import SGP4_ERRORS

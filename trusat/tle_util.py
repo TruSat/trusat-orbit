@@ -916,7 +916,7 @@ def make_tle_from_SGP4_satrec(satrec, satmeta, classification="T"):
         TLE         tle_util TruSatellite() Class variable (with TLE lines)
     """
     # Import this at the time of need
-    from trusat.caccelerated import jday_to_datetime
+    from .caccelerated import jday_to_datetime
 
     TLE = TruSatellite()
 

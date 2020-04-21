@@ -1,7 +1,13 @@
+sudo: false
 language: python
 python:
     - "3.6"      # current default Python on Travis CI
     - "3.7"
     - "3.8"
+install:
+    - pip install tox-travis
+    # - pip install coveralls
 script:
-    - python -m unittest discover tests/
+    - tox
+# after_success:
+#     - coveralls
