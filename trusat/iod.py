@@ -8,7 +8,7 @@ if sys.version_info[0] != 3 or sys.version_info[1] < 6:
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from math import asin, sin, cos, atan2
 
@@ -561,6 +561,8 @@ def DateTime_frompacked(DateTimeString,format_type="IOD"):
 	IOD:  YYYYMMDDHHMMSSsss
 	UK:     YYMMDDHHMMSSssss
 	RDE:    YYMMDDHHMMSS.ss
+
+	Also, deal with cases where users provide rounded-up/over-the-max values for HH:MM:SS fields.
 	"""
 	# Parse YEAR ourselves, as datetime works on a 2000-year boundary, whereas TLE dates work on a [19,20]57 year boundary
 	if (format_type in ["RDE","UK"]):
@@ -577,14 +579,38 @@ def DateTime_frompacked(DateTimeString,format_type="IOD"):
 	# Deal with decimal point in RDE format
 	if (format_type == "RDE"):
 		if (DateTimeString[14]=="."):
-			SUBSECS = DateTimeString[15:].rstrip()
-			MICROSECONDS = right_zero_pad(SUBSECS,6)
-			DateTimeString = DateTimeString[:14] + MICROSECONDS
+			SUBSEC = DateTimeString[15:].rstrip()
+			MICROSECOND = right_zero_pad(SUBSEC,6)
+			DateTimeString = DateTimeString[:14] + MICROSECOND
 		else:
 			DateTimeString = DateTimeString[:14] + "000000"
 
+	YEAR   = int(DateTimeString[0:4])
+	MONTH  = int(DateTimeString[4:6])
+	DAY    = int(DateTimeString[6:8])
+	HOUR   = int(DateTimeString[8:10])
+	MINUTE = int(DateTimeString[10:12])
+	SECOND = int(DateTimeString[12:14])
+	MICROSECOND = int(DateTimeString[14:20])
+
+	# Handle inputs with more than the maximum than datetime.strptime() can handle
+	# This is fromt the users' software rounding up
+	carry_over_time = 0
+	if (SECOND > 59):
+		carry_over_time += 60
+		SECOND -= 60
+	if (MINUTE > 59):
+		carry_over_time += 60*60
+		MINUTE -= 60
+	if (HOUR > 23):
+		carry_over_time += 24*60*60
+		HOUR -= 24
+
+	DateTimeString = f"{YEAR:04d}{MONTH:02d}{DAY:02d}{HOUR:02d}{MINUTE:02d}{SECOND:02d}{MICROSECOND:06d}"
+
 	formatstring = '%Y%m%d%H%M%S%f'
 	DateTimeUnpacked = datetime.strptime(DateTimeString,formatstring)
+	DateTimeUnpacked = DateTimeUnpacked + timedelta(seconds=carry_over_time)
 
 	return DateTimeUnpacked
 
