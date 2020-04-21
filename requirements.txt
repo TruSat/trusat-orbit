@@ -1,4 +1,4 @@
 Cython
 numpy
 spacetrack
-python-sgp4>=2.7
+python-sgp4>=2.6
