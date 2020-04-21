@@ -31,6 +31,8 @@ This codebase incorporates an updated and cython-accelerated version of python-S
 ## Coding Style
 Follow [PEP 8](https://www.python.org/dev/peps/pep-0008/) for any Python code and the style guide recommended for any other language.
 
+Additionally see [Best of the Best Practices](https://gist.github.com/sloria/7001839)
+
 ## Maintaining Repo
 [Style Guide](https://github.com/agis/git-style-guide)
 With the addition of commits to the master branch are done through PRs (Pull Request).

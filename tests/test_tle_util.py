@@ -19,7 +19,7 @@ except:
 sys.path.insert(1, '../trusat-backend')
 
 try:
-    from sgp4.cpropagation import sgp4, sgp4init
+    from trusat.caccelerated import *
 except ImportError as e:
     print(e)
     from sgp4.propagation import sgp4, sgp4init
@@ -32,8 +32,8 @@ import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG) 
 
-import tle_util   
-import satfit
+import trusat.tle_util as tle_util  
+import trusat.satfit as satfit
 
 # Global variables
 twopi = 2*pi
@@ -331,14 +331,24 @@ def compare_satrecs(sata,satb):
 
 
 class Tests(TestCase):
+    # Temporary database credentials hack
+    try:
+        CONFIG = os.path.abspath("../trusat-config.yaml")
+        db = database.Database(CONFIG)
+    except: 
+        log.error("DB Login credentials not available.")
+        db = False
+
     # TLE Epoch Test
     TestCase.epoch_string = '19236.07927356'
     TestCase.maxDiff = None
     
     def compare_satrecs_as_JSON(self, gotSat, expectedSat):
         # !TODO: there may be parts of the TruSatellite objects that are expected to differ
-        # after a database round trip (e.g. tle_id, import_timestamp?).
+        # after a database round trip (e.g. tle_id, import_timestamp).
         # If so, these can be munged out here before comparison.
+        gotSat.tle_id = None
+        gotSat.import_timestamp = None
         self.assertEqual(
             json.dumps(gotSat, default=serialize, indent=4, sort_keys=True),
             json.dumps(expectedSat, default=serialize, indent=4, sort_keys=True)
@@ -375,7 +385,7 @@ class Tests(TestCase):
         self.assertEqual(TLE.mean_motion_sec_derivative,0.0)
         self.assertEqual(TLE.bstar,0.29747e-3)
         self.assertEqual(TLE.ephemeris_type,0)
-        self.assertEqual(TLE.element_num,0)
+        self.assertEqual(TLE.element_set_number,0)
         self.assertEqual(TLE.inclination_degrees,96.8945)
         self.assertEqual(TLE.raan_degrees,115.9842)
         self.assertEqual(TLE.eccentricity,0.0499287)
@@ -404,11 +414,11 @@ class Tests(TestCase):
 
         # Add tests for perigee, period, apogee, semi_major_axis
 
-        sat1 = satfit.initsat(TLE)
+        (sat1, sat1meta) = satfit.initsat(TLE)
 
         # Verify the TLE data is exactly translated to the initialized SGP4 satrec object
-        self.assertEqual(tle_util.tle_fmt_epoch(sat1.epoch_datetime),'14063.83505828')
-        self.assertEqual(TLE.epoch_datetime, sat1.epoch_datetime)
+        self.assertEqual(tle_util.tle_fmt_epoch(sat1meta.epoch_datetime),'14063.83505828')
+        self.assertEqual(TLE.epoch_datetime, sat1meta.epoch_datetime)
         self.assertEqual(TLE.eccentricity,sat1.ecco)
         self.assertEqual(TLE.inclination_radians, sat1.inclo)
         self.assertEqual(TLE.inclination_degrees, degrees(sat1.inclo))
@@ -430,37 +440,22 @@ class Tests(TestCase):
         self.assert_expected_TLE(TLE) 
 
 
-    @skipUnless(os.getenv('TRUSAT_DATABASE_NAME', False), "No database configured; skipping")
+    @skipUnless(db, "No database configured; skipping")
     def test_satrec_to_TLE_persisted(self):
         TLE = tle_util.TruSatellite(line0=line0, line1=line1, line2=line2)
 
-        # Temporary database credentials hack
-        try:
-            with open('../login.txt', 'r') as f:
-                lines = f.readlines()
-                dbname = lines[0].strip()
-                dbtype = lines[1].strip()
-                dbhostname = lines[2].strip()
-                dbusername = lines[3].strip()
-                dbpassword = lines[4].strip()
-            db = database.Database(dbname,dbtype,dbhostname,dbusername,dbpassword)
-        except: 
-            log.error("DB Login credentials not available.")
-
         # Persist this to our database and get it back out, to make sure we do not lose or change data
-        db = database.Database()
-
         try:
-            db.addTLE(TLE)
-            TLE_ID = db.write_TLEs_to_db()  
-            TLE_from_database = db.get_TLE(TLE_ID)
+            self.db.addTLE(TLE)
+            TLE_ID = self.db.write_TLEs_to_db()  
+            TLE_from_database = self.db.get_TLE(TLE_ID)
 
             # Verify the data in the TLE made it exactly to the TLE object
             self.compare_satrecs_as_JSON(TLE_from_database, TLE)
             self.assert_expected_TLE(TLE_from_database) 
 
         finally:
-            db.clean()
+            self.db.clean()
 
         def test_tle_decimal(self):
             decm_assumed = "1234500"

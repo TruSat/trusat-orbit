@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 try:
-    from unittest2 import TestCase, main, expectedFailure
+    from unittest2 import TestCase, main, expectedFailure, skip
 except:
-    from unittest import TestCase, main, expectedFailure
+    from unittest import TestCase, main, expectedFailure, skip
 
 import logging
 log = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ log.setLevel(logging.DEBUG)
   
 from astropy.coordinates import Angle
 from datetime import datetime
-import iod
+import trusat.iod as iod
 
 def str_to_bool(s):
     if s == 'True':
@@ -502,8 +502,8 @@ class Tests(TestCase):
     def test_format_test_iod_compliant(self):
         print("format_test_iod(block)...")
 
-        obs_file = "tests/IOD_data_compliant.txt" 
-        obs_file_answers = "tests/IOD_data_compliant_answers.txt"
+        obs_file = "data/tests/IOD_data_compliant.txt" 
+        obs_file_answers = "data/tests/IOD_data_compliant_answers.txt"
         obs_type = "IOD"
         self.assertEqual(test_obs_file_with_answers(obs_type,obs_file,obs_file_answers),True,msg="IOD compliant test failed.")
 
@@ -512,15 +512,15 @@ class Tests(TestCase):
     def test_format_test_iod_noncompliant(self):
         print("format_test_iod(non compliant block)...")
 
-        obs_file = "tests/IOD_data_noncompliant.txt" 
-        obs_file_answers = "tests/IOD_data_noncompliant_answers.txt"
+        obs_file = "data/tests/IOD_data_noncompliant.txt" 
+        obs_file_answers = "data/tests/IOD_data_noncompliant_answers.txt"
         obs_type = "IOD"
         self.assertEqual(test_obs_file_with_answers(obs_type,obs_file,obs_file_answers),True,msg="IOD non compliant test failed.")
 
 
     def test_parse_iod_lines(self):
         print("test_parse_iod_lines(block)...")
-        test_file = "tests/IOD_data_compliant.txt" 
+        test_file = "data/tests/IOD_data_compliant.txt" 
         IODs = iod.get_iod_records_from_file(test_file)
 
         self.assertEqual(len(IODs),46,msg="Failed to read all (46) compliant IODs")
@@ -559,11 +559,11 @@ class Tests(TestCase):
 
 
     # Our regex isn't perfect, some badly formatted records get through the first screen
-    @expectedFailure
+    # @expectedFailure
     def test_parse_iod_lines_noncompliant(self):
         print("test_parse_iod_lines(block)...")
 
-        test_file = "tests/IOD_data_noncompliant.txt" 
+        test_file = "data/tests/IOD_data_noncompliant.txt" 
         IODs = iod.get_iod_records_from_file(test_file)
         print("Parsed {} lines from {}".format(len(IODs),test_file))
 
@@ -571,8 +571,8 @@ class Tests(TestCase):
     def test_format_test_uk_compliant(self):
         print("format_test_uk(block)...")
 
-        obs_file = "tests/UK_data_compliant.txt" 
-        obs_file_answers = "tests/UK_data_compliant_answers.txt"
+        obs_file = "data/tests/UK_data_compliant.txt" 
+        obs_file_answers = "data/tests/UK_data_compliant_answers.txt"
         obs_type = "UK"
         self.assertEqual(test_obs_file_with_answers(obs_type,obs_file,obs_file_answers),True,msg="UK compliant test failed.")
 
@@ -581,8 +581,8 @@ class Tests(TestCase):
     def test_format_test_uk_noncompliant(self):
         print("format_test_uk(non compliant block)...")
 
-        obs_file = "tests/UK_data_noncompliant.txt" 
-        obs_file_answers = "tests/UK_data_noncompliant_answers.txt"
+        obs_file = "data/tests/UK_data_noncompliant.txt" 
+        obs_file_answers = "data/tests/UK_data_noncompliant_answers.txt"
         obs_type = "UK"
         self.assertEqual(test_obs_file_with_answers(obs_type,obs_file,obs_file_answers),True,msg="UK non compliant test failed.")
 
@@ -590,7 +590,7 @@ class Tests(TestCase):
     def test_parse_uk_lines(self):
         print("test_parse_uk_lines(block)...")
 
-        obs_file = "tests/UK_data_compliant.txt" 
+        obs_file = "data/tests/UK_data_compliant.txt" 
         IODs = iod.get_uk_records_from_file(obs_file)
         self.assertEqual(len(IODs),49,msg="Failed to read all (49) compliant IODs")
 
@@ -635,15 +635,16 @@ class Tests(TestCase):
     def test_get_rde_records_from_file(self):
         print("get_rde_records_from_file(file)...")
 
-        obs_file = "tests/RDE_data_compliant.txt" 
+        obs_file = "data/tests/RDE_data_compliant.txt" 
         IODs = iod.get_rde_records_from_file(obs_file)
         self.assertEqual(len(IODs),14,msg="RDE compliant test failed.")
 
+    @skip("Requires completion of write_uk_line()")
     def test_parse_rde_block(self):
 
         test_rde_string="2420 1909 0.211 1204\n28\n0502402 184758.93 193923+452358 3.1 3.1 0 S\n999"
 
-        IOD = iod.parse_rde_record(test_rde_string)[0]
+        IOD = iod.parse_rde_record(test_rde_string)
         
         # TODO - Format the RDE "line" as a UK-formatted string.  Work ongoing in iod.py
         iod.write_uk_line(IOD)
