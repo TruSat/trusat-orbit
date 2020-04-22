@@ -1,3 +1,5 @@
+![TruSat banner](https://trusat-assets.s3.amazonaws.com/readme-banner.jpg)
+
 # trusat-orbit
 
 This repo supports the analyses of [IOD/RDE/UK positional formatting formats](http://www.satobs.org/position/posn_formats.html) and generation of TLEs at https://TruSat.org/

@@ -37,15 +37,27 @@ setup(
     long_description_content_type="text/markdown",
     url="https://trusat.org/",
     project_urls={
-        "Git repo" : "https://github.com/TruSat/trusat-orbit",
+        "Source" : "https://github.com/TruSat/trusat-orbit",
+        "Tracker" : "https://github.com/TruSat/trusat-orbit/issues",
         "Learning Hub" : "https://learn.trusat.org/docs/start-here",
         "Forums" : "https://discuss.trusat.org/"
     },
     packages=['trusat'],
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
+    classifiers = [
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: Apache Software License',
+        'Natural Language :: English',
+        'Operating System :: POSIX',
+        'Operating System :: MacOS :: MacOS X',
+        'Programming Language :: Python :: 3 :: Only',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+        'Topic :: Scientific/Engineering',
     ],
     python_requires='>=3.6',
     install_requires=[
