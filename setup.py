@@ -10,15 +10,15 @@ extensions = [
             include_dirs=[np.get_include()],
             extra_compile_args=['-O3','-ffast-math','-march=native'],
   ),
-  Extension('trusat.profile',
-            sources=['trusat/profile.pyx'],           
-            optional='optional',
-            include_dirs=[np.get_include(), '/usr/local/include'],
-            libraries=["m"],
-            extra_compile_args=['-O3','-ffast-math','-march=native','-fopenmp','-I/usr/local/opt/llvm/include'],
-            extra_link_args=['-lomp',"-L/usr/local/opt/libomp/lib/", "-L/usr/local/opt/llvm/lib"],
-            # extra_link_args=['-lomp','-L/usr/local/opt/libomp/lib/'],
-  )
+#   Extension('trusat.profile',
+#             sources=['trusat/profile.pyx'],           
+#             optional='optional',
+#             include_dirs=[np.get_include(), '/usr/local/include'],
+#             libraries=["m"],
+#             extra_compile_args=['-O3','-ffast-math','-march=native','-fopenmp','-I/usr/local/opt/llvm/include'],
+#             extra_link_args=['-lomp',"-L/usr/local/opt/libomp/lib/", "-L/usr/local/opt/llvm/lib"],
+#             # extra_link_args=['-lomp','-L/usr/local/opt/libomp/lib/'],
+#   )
 ]
 
 with open("README.md", "r") as fh:
