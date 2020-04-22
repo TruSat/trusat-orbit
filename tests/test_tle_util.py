@@ -16,7 +16,7 @@ except:
 # Until the following pull request is approved
 # https://github.com/brandon-rhodes/python-sgp4/pull/35
 
-sys.path.insert(1, '../trusat-backend')
+# sys.path.insert(1, '../trusat-backend')
 
 try:
     from trusat.caccelerated import *
@@ -27,7 +27,7 @@ from sgp4.ext import invjday, days2mdhms, rv2coe
 from sgp4.io import twoline2rv
 from sgp4.model import Satellite
 from sgp4 import earth_gravity
-import database
+from trusat_backend import database
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG) 
