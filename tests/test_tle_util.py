@@ -27,7 +27,16 @@ from sgp4.ext import invjday, days2mdhms, rv2coe
 from sgp4.io import twoline2rv
 from sgp4.model import Satellite
 from sgp4 import earth_gravity
-from trusat_backend import database
+
+try:
+    from trusat_backend import database
+    DB = True
+    print("Will attempt live database tests.")
+except ImportError:
+    DB = False
+    print("DB module not available")
+
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG) 
@@ -36,8 +45,8 @@ import trusat.tle_util as tle_util
 import trusat.satfit as satfit
 
 # Global variables
-twopi = 2*pi
-nocon = twopi/1440.0
+TWOPI = 2*pi
+NOCON = TWOPI/1440.0
 
 line0 = "USA 186"
 line1 = "1 28888U 05042A   14063.83505828 0.00032100  00000-0  29747-3 0    09"
@@ -332,11 +341,14 @@ def compare_satrecs(sata,satb):
 
 class Tests(TestCase):
     # Temporary database credentials hack
-    try:
-        CONFIG = os.path.abspath("../trusat-config.yaml")
-        db = database.Database(CONFIG)
-    except: 
-        log.error("DB Login credentials not available.")
+    if (DB):
+        try:
+            CONFIG = os.path.abspath("../trusat-config.yaml")
+            db = database.Database(CONFIG)
+        except: 
+            log.error("DB Login credentials not available.")
+            db = False
+    else:
         db = False
 
     # TLE Epoch Test
@@ -399,8 +411,8 @@ class Tests(TestCase):
         self.assertEqual(tle_util.tle_fmt_epoch(TLE.epoch_datetime),'14063.83505828')
         # TODO: Add test for jdsatepoch and jdSGP4epoch
         # FIXME: TLE object currently has no "mean motion degrees" variable
-        self.assertEqual(TLE.mean_motion_radians_per_minute,TLE.mean_motion_orbits_per_day*nocon)
-        self.assertEqual(TLE.mean_motion_radians_per_second,TLE.mean_motion_orbits_per_day*nocon/60.0)
+        self.assertEqual(TLE.mean_motion_radians_per_minute,TLE.mean_motion_orbits_per_day*NOCON)
+        self.assertEqual(TLE.mean_motion_radians_per_second,TLE.mean_motion_orbits_per_day*NOCON/60.0)
         self.assertEqual(TLE.inclination_degrees,degrees(TLE.inclination_radians))
         self.assertEqual(TLE.raan_degrees,degrees(TLE.raan_radians))
         self.assertEqual(TLE.arg_perigee_degrees,degrees(TLE.arg_perigee_radians))
@@ -429,7 +441,7 @@ class Tests(TestCase):
         self.assertEqual(TLE.mean_anomaly_radians, sat1.mo)
         self.assertEqual(TLE.mean_anomaly_degrees, degrees(sat1.mo))
         self.assertEqual(TLE.mean_motion_radians_per_minute, sat1.no_kozai)
-        self.assertEqual(TLE.mean_motion_orbits_per_day, sat1.no_kozai/nocon)
+        self.assertEqual(TLE.mean_motion_orbits_per_day, sat1.no_kozai/NOCON)
         self.assertEqual(TLE.mean_motion_radians_per_second, sat1.no_kozai/60)  
 
 

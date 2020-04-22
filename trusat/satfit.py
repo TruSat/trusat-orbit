@@ -56,7 +56,6 @@ from .tle_util import make_tle, append_tle_file, TLEFile, tle_fmt_epoch, datetim
 # parentdir = os.path.dirname(currentdir)
 # backend_path = os.path.join(parentdir, "../trusat-backend")
 # sys.path.insert(1,backend_path) 
-from trusat_backend import database
 
 from .elfind import SGN, so2r
 
@@ -3334,10 +3333,11 @@ def main(db=False):
 
         # Temporary database credentials hack
         try:
+            from trusat_backend import database
             CONFIG = os.path.abspath("../trusat-config.yaml")
             db = database.Database(CONFIG)
         except: 
-            log.error("DB Login credentials not available.")
+            log.error("DB not available.")
 
     srch = 'W' # initialize wide search
 

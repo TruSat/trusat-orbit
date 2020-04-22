@@ -6,7 +6,14 @@ import sys
 from timeit import Timer
 
 from trusat.caccelerated import *
-import trusat.profile as tsp
+try:
+    import trusat.profile as tsp
+    profile=True
+    print("Including performance profiling code.")
+except ImportError: 
+    profile=False
+    print("Cython profile module not available, skipping some tests.")
+
 from array import array
 import numpy as np
 
@@ -82,29 +89,33 @@ print("np.empty((1,10,3)            {:.6f} {:.2f}x".format( *tac(baseline,Timer(
 print()
 print("np.empty_like(zeros)         {:.6f} {:.2f}x (baseline)".format( *tac(baseline,Timer(lambda: np.empty_like(np_zeros_template)).timeit(number = num)) ))
 print("np.empty_like(empty)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: np.empty_like(np_empty_template)).timeit(number = num)) ))
-print("np_empty_like(zeros)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_empty_like(np_zeros_template)).timeit(number = num)) ))
-print("np_empty_like(empty)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_empty_like(np_empty_template)).timeit(number = num)) ))
-print("np_empty_like_c(zeros)       {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_empty_like_c(np_zeros_template)).timeit(number = num)) ))
-print("np_empty_like_c(empty)       {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_empty_like_c(np_empty_template)).timeit(number = num)) ))
+if (profile):
+    print("np_empty_like(zeros)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_empty_like(np_zeros_template)).timeit(number = num)) ))
+    print("np_empty_like(empty)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_empty_like(np_empty_template)).timeit(number = num)) ))
+    print("np_empty_like_c(zeros)       {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_empty_like_c(np_zeros_template)).timeit(number = num)) ))
+    print("np_empty_like_c(empty)       {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_empty_like_c(np_empty_template)).timeit(number = num)) ))
 print("np.zeros_like(empty)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: np.zeros_like(np_empty_template)).timeit(number = num)) ))
 print("np.zeros_like(zeros)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: np.zeros_like(np_zeros_template)).timeit(number = num)) ))
-print("np_zeros_like(empty)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_zeros_like(np_empty_template)).timeit(number = num)) ))
-print("np_zeros_like(zeros)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_zeros_like(np_zeros_template)).timeit(number = num)) ))
-print("np_zeros_like_c(empty)       {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_zeros_like_c(np_empty_template)).timeit(number = num)) ))
-print("np_zeros_like_c(zeros)       {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_zeros_like_c(np_zeros_template)).timeit(number = num)) ))
+if (profile):
+    print("np_zeros_like(empty)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_zeros_like(np_empty_template)).timeit(number = num)) ))
+    print("np_zeros_like(zeros)         {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_zeros_like(np_zeros_template)).timeit(number = num)) ))
+    print("np_zeros_like_c(empty)       {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_zeros_like_c(np_empty_template)).timeit(number = num)) ))
+    print("np_zeros_like_c(zeros)       {:.6f} {:.2f}x".format( *tac(baseline,Timer(lambda: tsp.np_zeros_like_c(np_zeros_template)).timeit(number = num)) ))
 print()
 
-baseline = Timer(lambda: tsp.vectorized_init_variable(jd)).timeit(number = num)
-print("vectorized_init_variable()   {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vectorized_init_variable(jd)).timeit(number = num)) ))
-print("vectorized_init_fixed()      {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vectorized_init_fixed(jd)).timeit(number = num)) ))
-print("vectorized_init_npview()     {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vectorized_init_npview(jd, rv_template)).timeit(number = num)) ))
-print()
+if (profile):
+    baseline = Timer(lambda: tsp.vectorized_init_variable(jd)).timeit(number = num)
+    print("vectorized_init_variable()   {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vectorized_init_variable(jd)).timeit(number = num)) ))
+    print("vectorized_init_fixed()      {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vectorized_init_fixed(jd)).timeit(number = num)) ))
+    print("vectorized_init_npview()     {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vectorized_init_npview(jd, rv_template)).timeit(number = num)) ))
+    print()
 
-baseline = Timer(lambda: tsp.tuple_to_array(test_tuple)).timeit(number = num)
-print("tuple_to_array()             {:.6f} {:.2f}x (baseline, inline loop)".format( *tac(baseline, Timer(lambda: tsp.tuple_to_array(test_tuple)).timeit(number = num)) ))
-print("np.asarray()                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: np.asarray(test_tuple)).timeit(number = num)) ))
-print("np_asarray()                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.np_asarray(test_tuple)).timeit(number = num)) ))
-print()
+if (profile):
+    baseline = Timer(lambda: tsp.tuple_to_array(test_tuple)).timeit(number = num)
+    print("tuple_to_array()             {:.6f} {:.2f}x (baseline, inline loop)".format( *tac(baseline, Timer(lambda: tsp.tuple_to_array(test_tuple)).timeit(number = num)) ))
+    print("np.asarray()                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: np.asarray(test_tuple)).timeit(number = num)) ))
+    print("np_asarray()                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.np_asarray(test_tuple)).timeit(number = num)) ))
+    print()
 
 baseline = Timer(lambda: float_step(bmin,bmax,bstep)).timeit(number = num)
 print("float_step():                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: float_step(bmin,bmax,bstep)).timeit(number = num)) ))
@@ -112,44 +123,49 @@ print("np.arrange():                {:.6f} {:.2f}x".format( *tac(baseline, Timer
 print()
 
 print("posradang():                 {:.6f}".format( Timer(lambda: posradang(1.87)).timeit(number = num)) )
-print("pythonmodulo():              {:.6f}".format( Timer(lambda: tsp.pythonmodulo(1.87)).timeit(number = num)) )
-print(f"340:{tsp.pythonmodulo(340)}  380:{tsp.pythonmodulo(380)}  -20:{tsp.pythonmodulo(-20)}")
+if (profile):
+    print("pythonmodulo():              {:.6f}".format( Timer(lambda: tsp.pythonmodulo(1.87)).timeit(number = num)) )
+    print(f"340:{tsp.pythonmodulo(340)}  380:{tsp.pythonmodulo(380)}  -20:{tsp.pythonmodulo(-20)}")
 print()
 
 print("Only one part...")
 print("param % 1:                   {:.6f}".format( Timer(lambda: sat2.jdsatepoch % 1).timeit(number = num)) )
-print("floor(f):                    {:.6f}".format( Timer(lambda: tsp.floor_floor(sat2.jdsatepoch)).timeit(number = num)) )
-print("int(f):                      {:.6f}".format( Timer(lambda: tsp.floor_mod(sat2.jdsatepoch)).timeit(number = num)) )
+if (profile):
+    print("floor(f):                    {:.6f}".format( Timer(lambda: tsp.floor_floor(sat2.jdsatepoch)).timeit(number = num)) )
+    print("int(f):                      {:.6f}".format( Timer(lambda: tsp.floor_mod(sat2.jdsatepoch)).timeit(number = num)) )
 print()
 
-print("Both int and frac parts")
-baseline = Timer(lambda: tsp.modf_sub(sat2.jdsatepoch)).timeit(number = num)
-print("modf_sub(param,f):           {:.6f} {:.2f}x (baseline - use modf() directly)".format( *tac(baseline, Timer(lambda: tsp.modf_sub(sat2.jdsatepoch)).timeit(number = num)) ))
-print("divmod_sub() :               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.divmod_sub(sat2.jdsatepoch)).timeit(number = num)) ))
-print("divmod_raw() :               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.divmod_raw(sat2.jdsatepoch)).timeit(number = num)) ))
-print("divmod(param):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: divmod(sat2.jdsatepoch, 1)).timeit(number = num)) ))
-print("modf_divmod():               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.modf_divmod(sat2.jdsatepoch)).timeit(number = num)) ))
-print()
+if(profile):
+    print("Both int and frac parts")
+    baseline = Timer(lambda: tsp.modf_sub(sat2.jdsatepoch)).timeit(number = num)
+    print("modf_sub(param,f):           {:.6f} {:.2f}x (baseline - use modf() directly)".format( *tac(baseline, Timer(lambda: tsp.modf_sub(sat2.jdsatepoch)).timeit(number = num)) ))
+    print("divmod_sub() :               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.divmod_sub(sat2.jdsatepoch)).timeit(number = num)) ))
+    print("divmod_raw() :               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.divmod_raw(sat2.jdsatepoch)).timeit(number = num)) ))
+    print("divmod(param):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: divmod(sat2.jdsatepoch, 1)).timeit(number = num)) ))
+    print("modf_divmod():               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.modf_divmod(sat2.jdsatepoch)).timeit(number = num)) ))
+    print()
 
 number = 100000
 baseline = Timer(lambda: norm(test_vec)).timeit(number = num)
 print("norm(pv):                    {:.6f} {:.2f}x (baseline)".format( *tac(baseline, Timer(lambda: norm(test_vec)).timeit(number = num)) ))
 print("norm(np):                    {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: norm(test_vec_np)).timeit(number = num)) ))
-print("mag_raw(pv):                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.mag_raw(test_vec)).timeit(number = num)) ))
-print("mag_raw(np):                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.mag_raw(test_vec_np)).timeit(number = num)) ))
-print("norm_py(pv):                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.norm_py(test_vec)).timeit(number = num)) ))
-print("np.linalg.norm(np):          {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.mag(test_vec_np)).timeit(number = num)) ))
-print("np.linalg.norm(pv):          {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.mag(test_vec)).timeit(number = num)) ))
+if (profile):
+    print("mag_raw(pv):                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.mag_raw(test_vec)).timeit(number = num)) ))
+    print("mag_raw(np):                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.mag_raw(test_vec_np)).timeit(number = num)) ))
+    print("norm_py(pv):                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.norm_py(test_vec)).timeit(number = num)) ))
+    print("np.linalg.norm(np):          {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.mag(test_vec_np)).timeit(number = num)) ))
+    print("np.linalg.norm(pv):          {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.mag(test_vec)).timeit(number = num)) ))
 print()
 
 number = 1000
 baseline = Timer(lambda: unit_vector(test_vec)).timeit(number = num)
 print("unit_vector(pv):             {:.6f} {:.2f}x (baseline)".format( *tac(baseline, Timer(lambda: unit_vector(test_vec)).timeit(number = num)) ))
 print("unit_vector(np):             {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: unit_vector(test_vec_np)).timeit(number = num)) ))
-print("unit_vector_def(pv):         {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.unit_vector_def(test_vec)).timeit(number = num)) ))
-print("unit_vector_def(np):         {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.unit_vector_def(test_vec_np)).timeit(number = num)) ))
-print("unit_vector_ref(pv):         {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.unit_vector_ref(test_vec, rtn_vec)).timeit(number = num)) ))
-print("unit_vector_np(np):          {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.unit_vector_np(test_vec_np)).timeit(number = num)) ))
+if (profile):
+    print("unit_vector_def(pv):         {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.unit_vector_def(test_vec)).timeit(number = num)) ))
+    print("unit_vector_def(np):         {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.unit_vector_def(test_vec_np)).timeit(number = num)) ))
+    print("unit_vector_ref(pv):         {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.unit_vector_ref(test_vec, rtn_vec)).timeit(number = num)) ))
+    print("unit_vector_np(np):          {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.unit_vector_np(test_vec_np)).timeit(number = num)) ))
 print()
 
 baseline = Timer(lambda: dot(test_vec, test_vec)).timeit(number=num)
@@ -157,43 +173,48 @@ print("dot(pv):                     {:.6f} {:.2f}x (baseline)".format( *tac(base
 print("dot(np):                     {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: dot(test_vec_np, test_vec_np)).timeit(number = num)) ))
 print("np.dot(np):                  {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: np.dot(test_vec_np, test_vec_np)).timeit(number = num)) ))
 print("np.dot(pv):                  {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: np.dot(test_vec, test_vec)).timeit(number = num)) ))
-print("npdot(pv):                   {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.npdot(test_vec, test_vec)).timeit(number = num)) ))
-print("dot_prange                   {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.dot_prange(test_vec, test_vec)).timeit(number = num)) ))
+if (profile):
+    print("npdot(pv):                   {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.npdot(test_vec, test_vec)).timeit(number = num)) ))
+    print("dot_prange                   {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.dot_prange(test_vec, test_vec)).timeit(number = num)) ))
 print()
 
-baseline = Timer(lambda: tsp.cross_rtn(test_vec, test_vec)).timeit(number=num)
-print("cross_rtn(pv):               {:.6f} {:.2f}x (baseline)".format( *tac(baseline, Timer(lambda: tsp.cross_rtn(test_vec, test_vec)).timeit(number = num)) ))
-print("cross_rtn(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.cross_rtn(test_vec_np, test_vec_np)).timeit(number = num)) ))
-print("cross_ref(pv):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.cross_ref(test_vec, test_vec, rtn_vec)).timeit(number = num)) ))
-print("cross_ref(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.cross_ref(test_vec_np, test_vec_np, rtn_vec_np)).timeit(number = num)) ))
-print("np.cross(pv) :               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: np.cross(test_vec, test_vec)).timeit(number = num)) ))
-print("npcross(pv):                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.npcross(test_vec, test_vec)).timeit(number = num)) ))
-print()
+if (profile):
+    baseline = Timer(lambda: tsp.cross_rtn(test_vec, test_vec)).timeit(number=num)
+    print("cross_rtn(pv):               {:.6f} {:.2f}x (baseline)".format( *tac(baseline, Timer(lambda: tsp.cross_rtn(test_vec, test_vec)).timeit(number = num)) ))
+    print("cross_rtn(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.cross_rtn(test_vec_np, test_vec_np)).timeit(number = num)) ))
+    print("cross_ref(pv):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.cross_ref(test_vec, test_vec, rtn_vec)).timeit(number = num)) ))
+    print("cross_ref(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.cross_ref(test_vec_np, test_vec_np, rtn_vec_np)).timeit(number = num)) ))
+    print("np.cross(pv) :               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: np.cross(test_vec, test_vec)).timeit(number = num)) ))
+    print("npcross(pv):                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.npcross(test_vec, test_vec)).timeit(number = num)) ))
+    print()
 
 baseline = Timer(lambda: vmadd_ref(test_vec, test_vec2, rtn_vec, 1)).timeit(number = num)
 print("vmadd_ref(pv):               {:.6f} {:.2f}x (baseline)".format( *tac(baseline, Timer(lambda: vmadd_ref(test_vec, test_vec2, rtn_vec, 1)).timeit(number = num)) ))
 print("vmadd_ref(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: vmadd_ref(test_vec_np, test_vec_np, rtn_vec_np, 1)).timeit(number = num)) ))
-print("vmadd_rtn(pv):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vmadd_rtn(test_vec, test_vec2, 1)).timeit(number = num)) ))
-print("vmadd_rtn(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vmadd_rtn(test_vec_np, test_vec_np, 1)).timeit(number = num)) ))
-print("vmadd_ref_prange(pv):        {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vmadd_ref_prange(test_vec, test_vec2, rtn_vec, 1)).timeit(number = num)) ))
+if (profile):
+    print("vmadd_rtn(pv):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vmadd_rtn(test_vec, test_vec2, 1)).timeit(number = num)) ))
+    print("vmadd_rtn(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vmadd_rtn(test_vec_np, test_vec_np, 1)).timeit(number = num)) ))
+    print("vmadd_ref_prange(pv):        {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.vmadd_ref_prange(test_vec, test_vec2, rtn_vec, 1)).timeit(number = num)) ))
 print()
 
 baseline = Timer(lambda: smult_ref(2, test_vec, rtn_vec)).timeit(number = num)
 print("smult_ref(pv):               {:.6f} {:.2f}x (baseline)".format( *tac(baseline, Timer(lambda: smult_ref(2, test_vec, rtn_vec)).timeit(number = num)) ))
 print("smult_ref(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: smult_ref(2, test_vec_np, rtn_vec_np)).timeit(number = num)) ))
-print("smult_rtn(pv):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.smult_rtn(2, test_vec)).timeit(number = num)) ))
-print("smult_rtn(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.smult_rtn(2, test_vec_np)).timeit(number = num)) ))
-print("smult_py(pv):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.smult_py(2, test_vec)).timeit(number = num)) ))
-print("smult_ref_prange(pv):        {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.smult_ref_prange(2, test_vec, rtn_vec)).timeit(number = num)) ))
+if (profile):
+    print("smult_rtn(pv):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.smult_rtn(2, test_vec)).timeit(number = num)) ))
+    print("smult_rtn(np):               {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.smult_rtn(2, test_vec_np)).timeit(number = num)) ))
+    print("smult_py(pv):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.smult_py(2, test_vec)).timeit(number = num)) ))
+    print("smult_ref_prange(pv):        {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.smult_ref_prange(2, test_vec, rtn_vec)).timeit(number = num)) ))
 print()
 
-print("Not currently using proj")
-baseline = Timer(lambda: tsp.proj_ref(test_vec, test_vec, rtn_vec)).timeit(number = num)
-print("proj_ref(pv):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.proj_ref(test_vec, test_vec, rtn_vec)).timeit(number = num)) ))
-print("proj_ref(np):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.proj_ref(test_vec_np, test_vec_np, rtn_vec_np)).timeit(number = num)) ))
-print("proj_rtn(pv):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.proj_rtn(test_vec, test_vec)).timeit(number = num)) ))
-print("proj_rtn(np):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.proj_rtn(test_vec_np, test_vec_np)).timeit(number = num)) ))
-print()
+if (profile):
+    print("Not currently using proj")
+    baseline = Timer(lambda: tsp.proj_ref(test_vec, test_vec, rtn_vec)).timeit(number = num)
+    print("proj_ref(pv):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.proj_ref(test_vec, test_vec, rtn_vec)).timeit(number = num)) ))
+    print("proj_ref(np):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.proj_ref(test_vec_np, test_vec_np, rtn_vec_np)).timeit(number = num)) ))
+    print("proj_rtn(pv):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.proj_rtn(test_vec, test_vec)).timeit(number = num)) ))
+    print("proj_rtn(np):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.proj_rtn(test_vec_np, test_vec_np)).timeit(number = num)) ))
+    print()
 
 print("Not currently using np.asarray")
 baseline = Timer(lambda: np.asarray(test_vec_np)).timeit(number = num)
@@ -205,7 +226,8 @@ print()
 
 baseline = Timer(lambda: delta_t(satnew,3600)).timeit(number = num)
 print("delta_t:                     {:.6f} {:.2f}x (baseline)".format( *tac(baseline, Timer(lambda: delta_t(satnew,3600)).timeit(number = num)) ))
-print("delta_t_old:                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.delta_t_old(satold,3600)).timeit(number = num)) ))
+if (profile):
+    print("delta_t_old:                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.delta_t_old(satold,3600)).timeit(number = num)) ))
 print()
 
 rd = np.array([[0.59544982, 0.14061455, 0.78833855], [0.60865287, -0.06224648, 0.78833855], [0.60868465, -0.06193494, 0.78833855], [0.60872963, -0.06149125, 0.78833855], [0.55200408, -0.26386443, 0.78833855], [0.55219627, -0.26346199, 0.78833855], [0.55238828, -0.26305917, 0.78833855], [0.52008562, -0.32224818, 0.78833855], [0.52024938, -0.32198372, 0.78833855], [0.52036712, -0.32179341, 0.78833855]],dtype=np.double)
@@ -214,11 +236,15 @@ ll = np.array([[0.00456624, 0.32275503, 0.94647152], [0.01598115, 0.56115783, 0.
 odata = np.array([[2458715.61, 1.55664956, 1.24212334, 4172.0, 408299.0], [2458722.54, 1.54232514, 0.974737447, 4172.0, 411181.0], [2458722.54, 1.59489793, 0.967111755, 4172.0, 411182.0], [2458722.54, 1.66383389, 0.955289479, 4172.0, 411183.0], [2458748.41, 3.47627697, 0.932449088, 4172.0, 416464.0], [2458748.41, 3.41200155, 0.948135077, 4172.0, 416465.0], [2458748.41, 3.34725501, 0.961012729, 4172.0, 416466.0], [2458798.26, 4.25884112, 1.15787821, 4172.0, 421414.0], [2458798.26, 4.35459538, 1.16465128, 4172.0, 421415.0], [2458798.26, 4.43039711, 1.16798418, 4172.0, 421416.0]]
 ,dtype=np.double)
 
-baseline = Timer(lambda: tsp.find_rms_inline_scalar(satnew, rd, ll, odata)).timeit(number=num)
-print("find_rms_inline_scalar:      {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.find_rms_inline_scalar(satnew, rd, ll, odata)).timeit(number = num)) ))
-print("find_rms:                    {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: find_rms(satnew, rd, ll, odata)).timeit(number = num)) ))
-print("find_rms_old:                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.find_rms_old(satold, rd, ll, odata)).timeit(number = num)) ))
-print("find_rmspy:                  {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.find_rmspy(satold, rd, ll, odata)).timeit(number = num)) ))
+if(profile):
+    baseline = Timer(lambda: tsp.find_rms_inline_scalar(satnew, rd, ll, odata)).timeit(number=num)
+    print("find_rms_inline_scalar:      {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.find_rms_inline_scalar(satnew, rd, ll, odata)).timeit(number = num)) ))
+    print("find_rms:                    {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: find_rms(satnew, rd, ll, odata)).timeit(number = num)) ))
+    print("find_rms_old:                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.find_rms_old(satold, rd, ll, odata)).timeit(number = num)) ))
+    print("find_rmspy:                  {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.find_rmspy(satold, rd, ll, odata)).timeit(number = num)) ))
+else:
+    print("find_rms:                    {:.6f}".format( Timer(lambda: find_rms(satnew, rd, ll, odata)).timeit(number = num)) )
+
 print()
 find_rms_inline_baseline = baseline
 
@@ -273,7 +299,8 @@ print("_sgp4_cpp_arr(odata {:d}):     {:.6f}".format(len(odata), Timer(lambda: s
 print()
 print("Array of {} times, relative to find_rms_inline_scalar()".format(len(odata)))
 print("find_rms_inline_arr:         {:.6f}  {:.2f}x".format( *tac(find_rms_inline_baseline,Timer(lambda: find_rms_inline(satnew, rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
-print("find_rms_inline_arr_prange:  {:.6f}  {:.2f}x".format( *tac(find_rms_inline_baseline,Timer(lambda: tsp.find_rms_inline_prange(satnew, rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
+if (profile):
+    print("find_rms_inline_arr_prange:  {:.6f}  {:.2f}x".format( *tac(find_rms_inline_baseline,Timer(lambda: tsp.find_rms_inline_prange(satnew, rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
 
 print()
 large_arr_size = 100
@@ -286,21 +313,24 @@ vv  = np.ndarray((len(a), len(jd), 3))
 print("Array of {} times, relative to find_rms_inline_scalar()".format(jd.shape[0]))
 find_rms_inline_baseline_large = Timer(lambda: find_rms_inline(satnew, rd, ll, jd, fr, rr, vv, err)).timeit(number = num)
 print("find_rms_inline_arr:         {:.6f}  {:.2f}x".format( *tac(find_rms_inline_baseline,Timer(lambda: find_rms_inline(satnew, rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
-print("find_rms_inline_arr_prange:  {:.6f}  {:.2f}x".format( *tac(find_rms_inline_baseline, Timer(lambda: tsp.find_rms_inline_prange(satnew, rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
+if (profile):
+    print("find_rms_inline_arr_prange:  {:.6f}  {:.2f}x".format( *tac(find_rms_inline_baseline, Timer(lambda: tsp.find_rms_inline_prange(satnew, rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
 print()
 
-print("Exploring overhead of passing varibles, _sgp4 vs find_rms contribution...")
-print("Relative to find_rms_inline_arr({:d})".format(large_arr_size))
-print("func_satx:                   {:.6f} {:.2f}x".format( *tac(find_rms_inline_baseline_large, Timer(lambda: tsp.func_satx(satnew)).timeit(number = num)) ))
-print("func_arrs:                   {:.6f} {:.2f}x".format( *tac(find_rms_inline_baseline_large, Timer(lambda: tsp.func_arrs(rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
-print("func_sgp4:                   {:.6f} {:.2f}x".format( *tac(find_rms_inline_baseline_large, Timer(lambda: tsp.func_sgp4(satnew, rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
-print()
+if (profile):
+    print("Exploring overhead of passing varibles, _sgp4 vs find_rms contribution...")
+    print("Relative to find_rms_inline_arr({:d})".format(large_arr_size))
+    print("func_satx:                   {:.6f} {:.2f}x".format( *tac(find_rms_inline_baseline_large, Timer(lambda: tsp.func_satx(satnew)).timeit(number = num)) ))
+    print("func_arrs:                   {:.6f} {:.2f}x".format( *tac(find_rms_inline_baseline_large, Timer(lambda: tsp.func_arrs(rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
+    print("func_sgp4:                   {:.6f} {:.2f}x".format( *tac(find_rms_inline_baseline_large, Timer(lambda: tsp.func_sgp4(satnew, rd, ll, jd, fr, rr, vv, err)).timeit(number = num)) ))
+    print()
 
 baseline = Timer(lambda: len(jd)).timeit(number = num)
 print("len(jd):                     {:.6f} {:.2f}x (baseline)".format( *tac(baseline, Timer(lambda: len(jd)).timeit(number = num)) ))
 print("jd.shape[0]:                 {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: jd.shape[0]).timeit(number = num)) ))
-print("func_len(jd):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.func_len(jd)).timeit(number = num)) ))
-print("func_np_shape(jd):           {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.func_np_shape(jd)).timeit(number = num)) ))
+if (profile):
+    print("func_len(jd):                {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.func_len(jd)).timeit(number = num)) ))
+    print("func_np_shape(jd):           {:.6f} {:.2f}x".format( *tac(baseline, Timer(lambda: tsp.func_np_shape(jd)).timeit(number = num)) ))
 print()
 
 # Old Python
