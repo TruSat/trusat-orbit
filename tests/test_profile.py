@@ -22,7 +22,6 @@ from sgp4.api import Satrec, SatrecArray, SGP4_ERRORS
 from sgp4.earth_gravity import wgs72
 from sgp4.io import twoline2rv
 
-import pickle
 from trusat.satfit import Date
 
 line0 = 'SL-16 R/B'
@@ -31,8 +30,6 @@ line2 = '2 22285  71.0198 174.7928 0006190 244.6688 115.3794 14.15033886386443'
 
 satold = twoline2rv(line1,line2,wgs72)
 satnew = Satrec.twoline2rv(line1,line2)
-with open('data/satfit_profile.pickle', 'rb') as f:
-    (odata, ll, rd, t1) = pickle.load(f)
 
 test_tuple           = (0.1, 0.2, 0.3)
 test_list            = [0.1, 0.2, 0.3]
