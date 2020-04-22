@@ -1,6 +1,1 @@
-cython
-numpy
-sgp4>=2.6
-spacetrack
 astropy
-mysql-connector-python-rf
