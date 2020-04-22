@@ -42,7 +42,7 @@ import pickle
 # Use local/dev version of python-sgp4
 
 from sgp4.api import Satrec, SatrecArray, SGP4_ERRORS, jday
-from caccelerated import *
+from trusat.caccelerated import *
 from sgp4 import earth_gravity
 
 # Not currently used, but restore with reading of local IOD files
