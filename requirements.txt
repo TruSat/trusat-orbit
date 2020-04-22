@@ -1,4 +1,4 @@
 cython
 numpy
-https://github.com/brandon-rhodes/python-sgp4/archive/master.zip
+#sgp4>=2.6
 spacetrack
