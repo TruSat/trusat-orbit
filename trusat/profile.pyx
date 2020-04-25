@@ -33,7 +33,7 @@ if sys.version_info[0] != 3 or sys.version_info[1] < 6:
 from . import caccelerated as tsc
 
 from sgp4.propagation import sgp4, sgp4init
-from sgp4.api import SGP4_ERRORS
+from sgp4.api import SGP4_ERRORS, WGS72
 
 import copy
 from libc.math cimport fabs, cos, sin, M_PI, sqrt, fmod, acos, asin, atan, floor, modf
@@ -61,6 +61,7 @@ log = logging.getLogger(__name__)
 cdef double TWOPI = 2*M_PI
 cdef double NOCON = TWOPI/1440.0
 cdef double DE2RA = M_PI/180.0
+cdef Py_UNICODE OPSMODE = 'i'
 
 
 def vectorized_init_variable(double [:] jd):
@@ -400,7 +401,7 @@ cpdef delta_el_old(sat, xincl=False, xnodeo=False,   eo=False, omegao=False, xmo
     # FIXME HACK
     jdSGP4epoch = sat.jdsatepoch - 2433281.5
 
-    sgp4init('wgs72', 'i', sat.satnum, jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot, 
+    sgp4init(WGS72, OPSMODE, sat.satnum, jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot, 
              sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
 
 
@@ -498,14 +499,14 @@ cpdef delta_el_new(sat, xincl=False, xnodeo=False,   eo=False, omegao=False, xmo
         jdsatepoch  = sat.jdsatepoch
         jdsatepochF = sat.jdsatepochF
        
-    sat.sgp4init(sat.satnum, jdSGP4epoch, sat_bstar, sat_ndot, sat_nddot,
+    sat.sgp4init(WGS72, OPSMODE, sat.satnum, jdSGP4epoch, sat_bstar, sat_ndot, sat_nddot,
                 sat_ecco, sat_argpo, sat_inclo, sat_mo, sat_no_kozai, sat_nodeo)
 
     # Need to update this manually after initialization
     sat.jdsatepoch = jdsatepoch
     sat.jdsatepochF = jdsatepochF
 
-    # sgp4init(sat.whichconst, sat.operationmode, sat.satnum, sat.jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot, sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
+    # sgp4init(sat.whichconst, OPSMODE, sat.whichconst, OPSMODE, sat.satnum, sat.jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot, sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
     # return sat
 
 cpdef find_rms_old(satx, double[:,:] rd, double[:,:] ll, double[:,:] odata):

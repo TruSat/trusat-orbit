@@ -18,7 +18,7 @@ from array import array
 import numpy as np
 
 from sgp4.propagation import sgp4, sgp4init
-from sgp4.api import Satrec, SatrecArray, SGP4_ERRORS
+from sgp4.api import Satrec, SatrecArray, SGP4_ERRORS, WGS72
 from sgp4.earth_gravity import wgs72
 from sgp4.io import twoline2rv
 
@@ -60,7 +60,7 @@ nodeo    = 6.08638547138321
 sat2 = Satrec()
 sat2_jdsatepoch  = 2451723.28495062
 
-sat2.sgp4init(satnum, sat2_jdsatepoch, bstar, ndot, nddot,
+sat2.sgp4init(WGS72, 'i', satnum, sat2_jdsatepoch, bstar, ndot, nddot,
               ecco, argpo, inclo, mo, no_kozai, nodeo)
 
 
@@ -251,7 +251,7 @@ satnew.sgp4(jd, fr)
 
 satrec3 = Satrec()
 satrec3_jdsatepoch  = 2451723.28495062
-satrec3.sgp4init(satnum, satrec3_jdsatepoch-2433281.5, bstar, 
+satrec3.sgp4init(WGS72, 'i', satnum, satrec3_jdsatepoch-2433281.5, bstar, 
                 ndot, nddot, ecco, argpo, inclo, mo, no_kozai, nodeo)
 
 print("Single element SGP4")

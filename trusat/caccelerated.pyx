@@ -35,6 +35,7 @@ if sys.version_info[0] != 3 or sys.version_info[1] < 6:
 # sys.path.insert(1,sgp4_path) 
 
 from sgp4.ext import invjday
+from sgp4.api import SGP4_ERRORS, WGS72
 
 from datetime import datetime
 from time import time
@@ -60,6 +61,7 @@ log = logging.getLogger(__name__)
 cdef double TWOPI = 2*M_PI
 cdef double NOCON = TWOPI/1440.0
 cdef double DE2RA = M_PI/180.0
+cdef Py_UNICODE OPSMODE = 'i'
 
 def float_step(start, stop, step):
     """ Return evenly spaced values within a given interval. Does not include stop value. 
@@ -305,7 +307,7 @@ cpdef delta_el(sat, xincl=False, xnodeo=False,   eo=False, omegao=False, xmo=Fal
         jdsatepoch  = sat.jdsatepoch
         jdsatepochF = sat.jdsatepochF
        
-    sat.sgp4init(sat.satnum, jdSGP4epoch, sat_bstar, sat_ndot, sat_nddot,
+    sat.sgp4init(WGS72, OPSMODE, sat.satnum, jdSGP4epoch, sat_bstar, sat_ndot, sat_nddot,
                 sat_ecco, sat_argpo, sat_inclo, sat_mo, sat_no_kozai, sat_nodeo)
 
     ## Need to update this manually after initialization
@@ -313,7 +315,7 @@ cpdef delta_el(sat, xincl=False, xnodeo=False,   eo=False, omegao=False, xmo=Fal
     # sat.jdsatepoch = jdsatepoch
     # sat.jdsatepochF = jdsatepochF
 
-    # sgp4init(sat.whichconst, sat.operationmode, sat.satnum, sat.jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot, sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
+    # sgp4init(sat.whichconst, OPSMODE, sat.whichconst, OPSMODE, sat.satnum, sat.jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot, sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo, sat)
     # return sat
 
 #TODO: Move this to satfit_caccelerated_profile.pyx when diff_el is ported
@@ -324,7 +326,7 @@ cdef delta_el_fast(sat):
     cdef double jdsatepochF = sat.jdsatepochF
     cdef double jdSGP4epoch = (jdsatepoch + jdsatepochF) - 2433281.5
 
-    sat.sgp4init(sat.satnum, jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot,
+    sat.sgp4init(WGS72, OPSMODE, sat.satnum, jdSGP4epoch, sat.bstar, sat.ndot, sat.nddot,
                 sat.ecco, sat.argpo, sat.inclo, sat.mo, sat.no_kozai, sat.nodeo)
     ## Need to update this manually after initialization
     ## No longer needed - updated in sgp4init() https://github.com/brandon-rhodes/python-sgp4/pull/49#
@@ -340,7 +342,7 @@ cdef delta_el_fast2(sat, double bstar, double ndot, double nddot,
     cdef double jdsatepochF = sat.jdsatepochF
     cdef double jdSGP4epoch = (jdsatepoch + jdsatepochF) - 2433281.5
 
-    sat.sgp4init(sat.satnum, jdSGP4epoch, bstar, ndot, nddot,
+    sat.sgp4init(WGS72, OPSMODE, sat.satnum, jdSGP4epoch, bstar, ndot, nddot,
                 ecco, argpo, inclo, mo, no_kozai, nodeo)
     ## Need to update this manually after initialization
     ## No longer needed - updated in sgp4init() https://github.com/brandon-rhodes/python-sgp4/pull/49#

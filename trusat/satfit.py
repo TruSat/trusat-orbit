@@ -41,7 +41,7 @@ import pickle
 
 # Use local/dev version of python-sgp4
 
-from sgp4.api import Satrec, SatrecArray, SGP4_ERRORS, jday
+from sgp4.api import Satrec, SatrecArray, SGP4_ERRORS, WGS72OLD, WGS72, WGS84, jday
 from trusat.caccelerated import *
 from sgp4 import earth_gravity
 
@@ -2563,19 +2563,16 @@ def initsat(TLE,gravconst="wgs72"):
     meta.parent_tle_id     = TLE.tle_id
 
     # SGP4 mode variables
-    operationmode  = u'i' # Unicode for cython
-    # satrec.error          = 0
+    operationmode  = 'i'
 
     if (gravconst == "wgs72old"):
-        whichconst = earth_gravity.wgs72old
+        whichconst = WGS72OLD
     elif (gravconst == "wgs84"):
-        whichconst = earth_gravity.wgs84
+        whichconst = WGS84
     else:
         # Most popular const used by TLEs
-        whichconst = earth_gravity.wgs72
-    # satrec.whichconst     = whichconst  # Python extension: remembers its consts
-    # satrec.whichconst = gravconst
-    satrec.sgp4init(satnum, 
+        whichconst = WGS72
+    satrec.sgp4init(whichconst, operationmode, satnum, 
                             meta.jdSGP4epoch, # epoch time in days from jan 0, 1950. 0 hr
                             bstar, ndot, nddot, ecco, argpo,
                             inclo, mo, no_kozai, nodeo)
