@@ -2,9 +2,19 @@
 
 # trusat-orbit
 
-This repo supports the analyses of [IOD/RDE/UK positional formatting formats](http://www.satobs.org/position/posn_formats.html) and generation of TLEs at https://TruSat.org/
+## Convert satellite observations to orbit predictions
 
-Currently, its orbit propagation code is based on a Python port of [Scott Campbell's C++ satfit code base]( https://github.com/interplanetarychris/scottcampbell-satfit). After initial prototyping, it is an aim of this repo to include OREKit and related tools for more advanced processing of orbit-related calculations.
+<img align="right" width="250" height="250" src="https://trusat-assets.s3.amazonaws.com/trusat-posat-animation-540x540.gif">
+
+This repo supports the analyses of [IOD/RDE/UK positional formatting formats](http://www.satobs.org/position/posn_formats.html) and generation of TLEs at [TruSat.org](https://TruSat.org/).
+
+TruSat is a citizen-powered open-source tool for space sustainability, crowdsourcing satellite observations to form an independent record of objects orbiting Earth.
+
+- Visit [TruSat.org](https://trusat.org) to see the live app
+- View the [docs](http://learn.trusat.org/) to learn more about the project
+- Join the [Discord](https://discord.gg/HfT62G) to follow the development discussion
+
+Currently, this orbit propagation code is based on a Python port of [Scott Campbell's C++ satfit code base]( https://github.com/interplanetarychris/scottcampbell-satfit). After initial prototyping, it is an aim of this repo to include OREKit and related tools for more advanced processing of orbit-related calculations.
 
 # Getting started with TruSat-orbit
 First, we recommend setting up a [python virtual environment](https://realpython.com/python-virtual-environments-a-primer/)
