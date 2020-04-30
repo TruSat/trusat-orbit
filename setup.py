@@ -21,20 +21,20 @@ extensions = [
 #   )
 ]
 
-# with open("README.md", "r") as fh:
-#     long_description = fh.read()
+with open("README.md", "r") as fh:
+    long_description = fh.read()
 
 with open('requirements.txt') as f:
     requirements = f.read().splitlines()
 
 setup(
-    name="trusat-orbit", 
+    name="trusat", 
     version="0.9.0",
     author="Chris Lewicki",
     author_email="chris@lewicki.com",
     description="TruSat satellite observation processing utilities",
-    # long_description=long_description,
-    # long_description_content_type="text/markdown",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     url="https://trusat.org/",
     project_urls={
         "Source" : "https://github.com/TruSat/trusat-orbit",

@@ -8,11 +8,13 @@ Currently, its orbit propagation code is based on a Python port of [Scott Campbe
 
 # Getting started with TruSat-orbit
 First, we recommend setting up a [python virtual environment](https://realpython.com/python-virtual-environments-a-primer/)
+
+We're still working on a clean environment setup following conversion of the project to a pip-installable packages.
+A quick start looks something like:
 ```
-git clone https://github.com/TruSat/trusat-orbit.git
-cd trusat-orbit
-pip install -r requirements.txt
-python trusat/satfit.py
+pip3 install git+https://github.com/TruSat/trusat-backend@dev.chris.package#egg=trusat_backend-1.1.0
+pip3 install trusat
+python -m trusat.satfit
 ```
 
 ## Contents
